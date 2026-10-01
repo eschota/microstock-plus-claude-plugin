@@ -89,7 +89,7 @@ The server works with any MCP client: Cursor, OpenAI Codex CLI, and others. [doc
 ## Troubleshooting
 
 - **Claude says the Microstock+ tools aren't available.** In Claude Code, run `/mcp` and check that the `plugin:microstock-plus:microstock-plus` server is connected. If it failed to start, check that `node --version` prints 18 or newer in the terminal you start Claude from, then restart the session. In claude.ai chat and Cowork the server doesn't run; see [above](#claude-desktop-claudeai-and-cowork).
-- **"No Microstock+ agent key is configured".** Run `/plugin configure microstock-plus@microstock-plus` and enter your key, then restart the session. `claude plugin configure microstock-plus@microstock-plus` in a terminal shows whether the key is set.
+- **"No Microstock+ agent key is configured".** Run `/plugin configure microstock-plus@microstock-plus` and enter your key, then restart the session. In Claude Code 2.1.285 or later, `claude plugin configure microstock-plus@microstock-plus` in a terminal shows whether the key is set.
 - **`invalid_api_key` or `revoked_api_key`.** The key was mistyped, rotated or revoked. Create a new one at [microstock.plus/ai-agent-skills](https://microstock.plus/ai-agent-skills) and enter it again.
 - **`scope_required`.** The key lacks a permission for that action. Create a key with the scope you need. `mplus_run_ai_keywording` isn't offered at all when the key lacks `ai:run`.
 - **`rate_limited`.** A key may send 120 requests and 30 changes a minute. The server waits and retries once by itself; for big jobs, ask Claude to work in batches of up to 100 files.

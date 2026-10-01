@@ -89,7 +89,7 @@ claude plugin install microstock-plus@microstock-plus
 ## Если что-то не работает
 
 - **Claude говорит, что инструментов Microstock+ нет.** В Claude Code выполните `/mcp` и проверьте, что сервер `plugin:microstock-plus:microstock-plus` подключён. Если он не запустился, проверьте, что `node --version` в терминале, из которого вы запускаете Claude, показывает 18 или новее, и перезапустите сессию. В чате claude.ai и в Cowork сервер не запускается; см. [выше](#claude-desktop-claudeai-и-cowork).
-- **«No Microstock+ agent key is configured».** Выполните `/plugin configure microstock-plus@microstock-plus`, введите ключ и перезапустите сессию. Команда `claude plugin configure microstock-plus@microstock-plus` в терминале покажет, задан ли ключ.
+- **«No Microstock+ agent key is configured».** Выполните `/plugin configure microstock-plus@microstock-plus`, введите ключ и перезапустите сессию. В Claude Code 2.1.285 и новее команда `claude plugin configure microstock-plus@microstock-plus` в терминале покажет, задан ли ключ.
 - **`invalid_api_key` или `revoked_api_key`.** Ключ введён с ошибкой, перевыпущен или отозван. Создайте новый на [microstock.plus/ai-agent-skills](https://microstock.plus/ai-agent-skills) и введите его снова.
 - **`scope_required`.** У ключа нет нужного разрешения. Создайте ключ с нужным скоупом. Без `ai:run` инструмент `mplus_run_ai_keywording` вообще не предлагается.
 - **`rate_limited`.** На ключ — 120 запросов и 30 изменений в минуту. Сервер сам подождёт и повторит один раз; для больших задач попросите Claude работать батчами до 100 файлов.
