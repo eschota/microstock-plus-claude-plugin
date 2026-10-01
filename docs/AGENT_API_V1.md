@@ -119,8 +119,8 @@ There is no `delete` scope and none can be added.
 }
 ```
 
-Agency ids are the ones M+ uses internally (`esp` = Adobe Stock, `shutterstock`,
-`pond5`, `istock`, `alamy`, `dreamstime`, ...). `GET /me` lists the user's connected ones.
+Agency ids are the ones M+ uses internally (`adobestock` = Adobe Stock, `esp` = iStock / Getty ESP,
+`shutterstock`, `pond5`, `alamy`, `dreamstime`, ...). `GET /me` lists the user's connected ones.
 
 Status values (read): `ready, ignored, queued, uploading, uploaded, uploadfailed,
 submitted, submitfailed, approved, rejected, approvalfailed, notready, scheduled,
