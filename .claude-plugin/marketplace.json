@@ -1,0 +1,17 @@
+{
+  "name": "microstock-plus",
+  "owner": {
+    "name": "Qwertystock / Microstock+",
+    "url": "https://microstock.plus"
+  },
+  "metadata": {
+    "description": "The Microstock+ plugin for Claude: manage a stock contributor's portfolio, metadata, CSV exports and agency uploads."
+  },
+  "plugins": [
+    {
+      "name": "microstock-plus",
+      "source": "./",
+      "description": "Manage your Microstock+ stock portfolio from Claude: audit and improve titles, descriptions and keywords, preview and apply batch edits, export CSV, queue uploads to stock agencies after you approve them, run paid AI keywording only after you confirm the price, and follow uploads and reviews as they happen. Nothing can be deleted through it."
+    }
+  ]
+}

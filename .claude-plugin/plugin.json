@@ -1,0 +1,34 @@
+{
+  "name": "microstock-plus",
+  "displayName": "Microstock+",
+  "version": "1.0.0",
+  "description": "Manage your Microstock+ stock portfolio from Claude: audit and improve titles, descriptions and keywords, preview and apply batch edits, export CSV, queue uploads to stock agencies after you approve them, run paid AI keywording only after you confirm the price, and follow uploads and reviews as they happen. Nothing can be deleted through it.",
+  "author": {
+    "name": "Qwertystock / Microstock+",
+    "url": "https://microstock.plus"
+  },
+  "homepage": "https://microstock.plus/ai-agent-skills",
+  "license": "MIT",
+  "keywords": [
+    "microstock",
+    "stock-photography",
+    "stock-footage",
+    "keywording",
+    "metadata",
+    "csv-export",
+    "adobe-stock",
+    "shutterstock",
+    "istock",
+    "pond5",
+    "mcp"
+  ],
+  "userConfig": {
+    "api_key": {
+      "type": "string",
+      "title": "Microstock+ agent key",
+      "description": "Your Microstock+ agent key, starting with mpk_live_. Sign in at https://microstock.plus/ai-agent-skills and create one in the \"Agent keys\" section; it is shown only once. Claude Code keeps it in your system's secure credential store.",
+      "sensitive": true,
+      "required": true
+    }
+  }
+}

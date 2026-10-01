@@ -1,0 +1,3146 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Microstock+ Agent API",
+    "version": "1.0.0",
+    "summary": "Let AI agents manage a Microstock+ user's portfolio on the user's behalf.",
+    "description": "Contract: docs/AGENT_API_V1.md (Agent API v1).\n\n- **An agent acts as the user, with less power.** Every call is scoped to the key owner's own account.\n- **No deletion, ever.** No endpoint, scope or flag removes anything; any `DELETE` returns `405 deletion_not_supported`. Deleting stays manual in the web interface.\n- **Money needs a human.** Paid actions need the `ai:run` scope (off by default), a quote first, and an `Idempotency-Key`.\n- **Conventions.** JSON in and out; every object has `object`; times are ISO-8601 UTC; lists are `{object: \"list\", data, has_more, next_cursor}` with `cursor` and `limit` (1-200, default 50); every response has `x-request-id`.\n- **Idempotency.** Send `Idempotency-Key: <uuid>` on POST and PATCH; a repeat within 24 h returns the stored response with `idempotent-replayed: true`.\n- **Rate limits per key.** 120 requests/min, 30 mutations/min, 2 concurrent streams; headers `x-ratelimit-limit-requests`, `x-ratelimit-remaining-requests`, `x-ratelimit-reset-requests`; `429 rate_limited` with `retry-after`.\n- **Optimistic concurrency.** Every file has `metaver`; send `if_match_metaver` to get `409 metadata_conflict` instead of overwriting a newer edit.\n- **Visibility.** Every change appears in the user's event feed and My Files, and is audited with the key prefix.",
+    "contact": {
+      "name": "Microstock+",
+      "url": "https://microstock.plus/ai-agent-skills"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://microstock.plus/api/agent/v1",
+      "description": "Production"
+    }
+  ],
+  "security": [
+    {
+      "agentKey": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "account",
+      "description": "The key owner's account."
+    },
+    {
+      "name": "files",
+      "description": "Folders and files (read)."
+    },
+    {
+      "name": "metadata",
+      "description": "Titles, descriptions, keywords and flags."
+    },
+    {
+      "name": "statuses",
+      "description": "Per-agency statuses and upload queueing."
+    },
+    {
+      "name": "exports",
+      "description": "Free CSV exports."
+    },
+    {
+      "name": "ai",
+      "description": "AI keywording quotes, paid runs and jobs."
+    },
+    {
+      "name": "events",
+      "description": "Event feed for near real-time progress."
+    }
+  ],
+  "paths": {
+    "/me": {
+      "get": {
+        "operationId": "getAccount",
+        "tags": [
+          "account"
+        ],
+        "summary": "Account, agencies, limits and key",
+        "description": "The key owner's account: plan, balance, connected agencies (with the ids used everywhere else), keyword settings, limits, and the calling key's name, prefix and scopes.\n\nRequired scope: `account:read`.",
+        "security": [
+          {
+            "agentKey": [
+              "account:read"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The account.",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "x-ratelimit-limit-requests": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "x-ratelimit-remaining-requests": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "x-ratelimit-reset-requests": {
+                "$ref": "#/components/headers/RateLimitReset"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/folders": {
+      "get": {
+        "operationId": "listFolders",
+        "tags": [
+          "files"
+        ],
+        "summary": "Folder tree",
+        "description": "Folders as a flat list in path order, with file counts and per-agency status counts. Archived folders are excluded unless `archived=true`.\n\nRequired scope: `files:read`.",
+        "security": [
+          {
+            "agentKey": [
+              "files:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "description": "List the subfolders of this folder.",
+            "schema": {
+              "type": "string",
+              "default": "/"
+            }
+          },
+          {
+            "name": "recursive",
+            "in": "query",
+            "description": "Include nested subfolders at every depth.",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          {
+            "name": "archived",
+            "in": "query",
+            "description": "`true` lists archived folders instead of active ones.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of folders.",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "x-ratelimit-limit-requests": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "x-ratelimit-remaining-requests": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "x-ratelimit-reset-requests": {
+                "$ref": "#/components/headers/RateLimitReset"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/files": {
+      "get": {
+        "operationId": "listFiles",
+        "tags": [
+          "files"
+        ],
+        "summary": "List or search files",
+        "description": "Files in stable order (folder, then filename). `metadata.description` is left out unless `expand=metadata`.\n\nRequired scope: `files:read`.",
+        "security": [
+          {
+            "agentKey": [
+              "files:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "folder",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "/"
+            }
+          },
+          {
+            "name": "recursive",
+            "in": "query",
+            "description": "Include subfolders.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Text matched against filename, title and keywords, or a comma-separated list of iids.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/MediaType"
+            }
+          },
+          {
+            "name": "agency",
+            "in": "query",
+            "description": "Only files set up for this agency.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "With `agency`: only files in this status there.",
+            "schema": {
+              "$ref": "#/components/schemas/FileStatus"
+            }
+          },
+          {
+            "name": "missing",
+            "in": "query",
+            "description": "Comma-separated; files lacking any of these fields.",
+            "schema": {
+              "type": "string",
+              "examples": [
+                "keywords,title"
+              ]
+            }
+          },
+          {
+            "name": "min_keywords",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "max_keywords",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "archived",
+            "in": "query",
+            "description": "`true` lists archived files instead of active ones.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "updated_since",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "expand",
+            "in": "query",
+            "description": "`metadata` includes descriptions.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "metadata"
+              ]
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of files.",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "x-ratelimit-limit-requests": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "x-ratelimit-remaining-requests": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "x-ratelimit-reset-requests": {
+                "$ref": "#/components/headers/RateLimitReset"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/files/{iid}": {
+      "get": {
+        "operationId": "getFile",
+        "tags": [
+          "files"
+        ],
+        "summary": "One file",
+        "description": "One file with full metadata, metaver, statuses and per-agency validation.\n\nRequired scope: `files:read`.",
+        "security": [
+          {
+            "agentKey": [
+              "files:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Iid"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The file.",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "x-ratelimit-limit-requests": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "x-ratelimit-remaining-requests": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "x-ratelimit-reset-requests": {
+                "$ref": "#/components/headers/RateLimitReset"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/File"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteFileNotSupported",
+        "tags": [
+          "files"
+        ],
+        "summary": "Not supported: deletion",
+        "description": "There is no way to delete anything through the Agent API: every `DELETE` request on any path answers `405 deletion_not_supported`. Deleting stays a manual action in the Microstock+ web interface.",
+        "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Iid"
+          }
+        ],
+        "responses": {
+          "405": {
+            "$ref": "#/components/responses/DeletionNotSupported"
+          }
+        }
+      }
+    },
+    "/files/{iid}/metadata": {
+      "patch": {
+        "operationId": "patchFileMetadata",
+        "tags": [
+          "metadata"
+        ],
+        "summary": "Merge-patch one file's metadata",
+        "description": "Changes only the fields present. Send `if_match_metaver` to get `409 metadata_conflict` instead of overwriting a newer edit. The change appears in the user's event feed and can be undone from the metadata history in My Files.\n\nRequired scope: `metadata:write`.",
+        "security": [
+          {
+            "agentKey": [
+              "metadata:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Iid"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The patch.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchMetadataRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated file.",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "x-ratelimit-limit-requests": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "x-ratelimit-remaining-requests": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "x-ratelimit-reset-requests": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "idempotent-replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/File"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/files/metadata:batch": {
+      "post": {
+        "operationId": "batchUpdateMetadata",
+        "tags": [
+          "metadata"
+        ],
+        "summary": "Patch up to 100 files (with dry run)",
+        "description": "Each item succeeds or fails on its own (per-item `error`). `dry_run: true` validates and returns the would-be files without writing anything.\n\nRequired scope: `metadata:write`.",
+        "security": [
+          {
+            "agentKey": [
+              "metadata:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Up to 100 patches.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchMetadataRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Per-item results.",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "x-ratelimit-limit-requests": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "x-ratelimit-remaining-requests": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "x-ratelimit-reset-requests": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "idempotent-replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/files/status:batch": {
+      "post": {
+        "operationId": "batchSetStatus",
+        "tags": [
+          "statuses"
+        ],
+        "summary": "Set ready / queued / ignored per agency",
+        "description": "`queued` sends files to the agency (upload and submit). Only connected agencies; the Pond5 release guard and Microstock+ submission limits apply as in the web interface. Failures such as `nosubmissions` are per-item errors.\n\nRequired scope: `status:write`.",
+        "security": [
+          {
+            "agentKey": [
+              "status:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Files, agencies and the status to set.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StatusBatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "One result per file and agency.",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "x-ratelimit-limit-requests": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "x-ratelimit-remaining-requests": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "x-ratelimit-reset-requests": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "idempotent-replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusBatchResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/exports/csv": {
+      "post": {
+        "operationId": "createCsvExport",
+        "tags": [
+          "exports"
+        ],
+        "summary": "Build a CSV export (free formats)",
+        "description": "Exports up to 500 files (from `iids` or a `folder`). With `Accept: text/csv` the CSV is returned directly instead of the export object.\n\nRequired scope: `csv:export`.",
+        "security": [
+          {
+            "agentKey": [
+              "csv:export"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "What to export and how.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The export, or the CSV itself with `Accept: text/csv`.",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "x-ratelimit-limit-requests": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "x-ratelimit-remaining-requests": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "x-ratelimit-reset-requests": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "idempotent-replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Export"
+                }
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/exports/{id}/download": {
+      "get": {
+        "operationId": "downloadCsvExport",
+        "tags": [
+          "exports"
+        ],
+        "summary": "Download an export's CSV",
+        "description": "The `download_url` of an export. Works until `expires_at`.\n\nRequired scope: `csv:export`.",
+        "security": [
+          {
+            "agentKey": [
+              "csv:export"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ExportId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The CSV file.",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "x-ratelimit-limit-requests": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "x-ratelimit-remaining-requests": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "x-ratelimit-reset-requests": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "content-disposition": {
+                "description": "attachment; filename=...",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/ai/keywording:quote": {
+      "post": {
+        "operationId": "createAiKeywordingQuote",
+        "tags": [
+          "ai"
+        ],
+        "summary": "Price quote for AI keywording (free)",
+        "description": "Nothing is charged. Show the amount to the user; run the quote only after the user confirms it.\n\nRequired scope: `ai:quote`.",
+        "security": [
+          {
+            "agentKey": [
+              "ai:quote"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Files and mode.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuoteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The quote.",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "x-ratelimit-limit-requests": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "x-ratelimit-remaining-requests": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "x-ratelimit-reset-requests": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "idempotent-replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Quote"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/ai/keywording:run": {
+      "post": {
+        "operationId": "runAiKeywording",
+        "tags": [
+          "ai"
+        ],
+        "summary": "Run a quoted AI keywording job (PAID)",
+        "description": "Charges the balance for files that succeed, at the quoted price. Needs the `ai:run` scope (off by default) and an `Idempotency-Key`; repeating the request with the same key returns the same job. Progress via `GET /jobs/{id}` or events.\n\nRequired scope: `ai:run`.",
+        "security": [
+          {
+            "agentKey": [
+              "ai:run"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKeyRequired"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The quote to run.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The job.",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "x-ratelimit-limit-requests": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "x-ratelimit-remaining-requests": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "x-ratelimit-reset-requests": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "idempotent-replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-idempotency-key-required": true
+      }
+    },
+    "/jobs/{id}": {
+      "get": {
+        "operationId": "getJob",
+        "tags": [
+          "ai"
+        ],
+        "summary": "AI job progress",
+        "description": "Status, files done/failed and the amount charged so far.\n\nRequired scope: `files:read`.",
+        "security": [
+          {
+            "agentKey": [
+              "files:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/JobId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The job.",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "x-ratelimit-limit-requests": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "x-ratelimit-remaining-requests": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "x-ratelimit-reset-requests": {
+                "$ref": "#/components/headers/RateLimitReset"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/events": {
+      "get": {
+        "operationId": "listEvents",
+        "tags": [
+          "events"
+        ],
+        "summary": "Event feed (long poll)",
+        "description": "Without `since`: the most recent events, oldest first. With `since`: events after that event. When nothing matches, waits up to `wait` seconds for a new matching event. Retention: 7 days.\n\nRequired scope: `events:read`.",
+        "security": [
+          {
+            "agentKey": [
+              "events:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "description": "An event id, normally the previous `next_cursor`. Empty for the most recent events.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "types",
+            "in": "query",
+            "description": "Comma-separated event types.",
+            "schema": {
+              "type": "string",
+              "examples": [
+                "file.status.changed,ai.job.completed"
+              ]
+            }
+          },
+          {
+            "name": "wait",
+            "in": "query",
+            "description": "Seconds to wait for a new event when none is available.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 25,
+              "default": 0
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Events.",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "x-ratelimit-limit-requests": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "x-ratelimit-remaining-requests": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "x-ratelimit-reset-requests": {
+                "$ref": "#/components/headers/RateLimitReset"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/events/stream": {
+      "get": {
+        "operationId": "streamEvents",
+        "tags": [
+          "events"
+        ],
+        "summary": "Event stream (Server-Sent Events)",
+        "description": "Each event is sent as `id:`, `event: <type>` and `data: <event JSON>`; a heartbeat comment every 20 s. Resume with `Last-Event-ID`. At most 2 concurrent streams per key.\n\nRequired scope: `events:read`.",
+        "security": [
+          {
+            "agentKey": [
+              "events:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Last-Event-ID",
+            "in": "header",
+            "description": "Resume after this event id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "An open event stream.",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "agentKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "mpk_live_<prefix>_<secret>",
+        "description": "An agent key created by the signed-in user at https://microstock.plus/ai-agent-skills (section \"Agent keys\"). `prefix` is 8 lowercase hex characters, `secret` 43 base64url characters. Each key carries scopes; cookies and session auth are ignored on this API."
+      }
+    },
+    "headers": {
+      "RequestId": {
+        "description": "Request id, also in error bodies.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "RateLimitLimit": {
+        "description": "Requests allowed per minute for this key (120).",
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "RateLimitRemaining": {
+        "description": "Requests left in the current window.",
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "RateLimitReset": {
+        "description": "Seconds until the window resets.",
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "RetryAfter": {
+        "description": "Seconds to wait before retrying.",
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "IdempotentReplayed": {
+        "description": "`true` when this is the stored response of an earlier request with the same Idempotency-Key.",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "true"
+          ]
+        }
+      }
+    },
+    "parameters": {
+      "Cursor": {
+        "name": "cursor",
+        "in": "query",
+        "description": "`next_cursor` of the previous page.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "description": "Page size, 1-200.",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "default": 50
+        }
+      },
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "description": "A UUID. A repeat within 24 h returns the stored response with `idempotent-replayed: true`; the same key with a different body is `409 idempotency_mismatch`.",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "IdempotencyKeyRequired": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "description": "Required for paid actions. A UUID; repeating the request with the same key within 24 h returns the stored response (the same job) instead of charging again.",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "Iid": {
+        "name": "iid",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "description": "File id."
+      },
+      "ExportId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "description": "Export id (`exp_...`)."
+      },
+      "JobId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "description": "Job id."
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Invalid request (`invalid_request_error`): invalid_json, missing_param, invalid_param, invalid_status, invalid_cursor, empty_value, title_too_long, keywords_too_many, invalid_combination, batch_too_large, export_too_large.",
+        "headers": {
+          "x-request-id": {
+            "$ref": "#/components/headers/RequestId"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "examples": {
+              "example": {
+                "value": {
+                  "error": {
+                    "type": "invalid_request_error",
+                    "code": "batch_too_large",
+                    "message": "At most 100 items per batch.",
+                    "param": "items",
+                    "request_id": "req_7f3c0a1b2c3d4e5f"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Missing, invalid or revoked key (`authentication_error`): invalid_api_key, revoked_api_key.",
+        "headers": {
+          "x-request-id": {
+            "$ref": "#/components/headers/RequestId"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "examples": {
+              "example": {
+                "value": {
+                  "error": {
+                    "type": "authentication_error",
+                    "code": "invalid_api_key",
+                    "message": "This agent key is not valid.",
+                    "param": null,
+                    "request_id": "req_7f3c0a1b2c3d4e5f"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Not allowed (`permission_error`): scope_required, not_owner, agent_api_disabled.",
+        "headers": {
+          "x-request-id": {
+            "$ref": "#/components/headers/RequestId"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "examples": {
+              "example": {
+                "value": {
+                  "error": {
+                    "type": "permission_error",
+                    "code": "scope_required",
+                    "message": "This key lacks the ai:run scope.",
+                    "param": "ai:run",
+                    "request_id": "req_7f3c0a1b2c3d4e5f"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Not found (`not_found_error`): file_not_found, folder_not_found, job_not_found, export_not_found, quote_not_found.",
+        "headers": {
+          "x-request-id": {
+            "$ref": "#/components/headers/RequestId"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "examples": {
+              "example": {
+                "value": {
+                  "error": {
+                    "type": "not_found_error",
+                    "code": "file_not_found",
+                    "message": "No file with iid 6abc74e948864d403ea0c559.",
+                    "param": "iid",
+                    "request_id": "req_7f3c0a1b2c3d4e5f"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "DeletionNotSupported": {
+        "description": "Deleting is never possible through the Agent API (`permission_error`, `deletion_not_supported`). Users delete files in the Microstock+ web interface.",
+        "headers": {
+          "x-request-id": {
+            "$ref": "#/components/headers/RequestId"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "examples": {
+              "example": {
+                "value": {
+                  "error": {
+                    "type": "permission_error",
+                    "code": "deletion_not_supported",
+                    "message": "Deleting is not available through the Agent API. Delete files in the Microstock+ web interface.",
+                    "param": null,
+                    "request_id": "req_7f3c0a1b2c3d4e5f"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Conflict (`conflict_error`): metadata_conflict, quote_expired, quote_used, invalid_status_transition, idempotency_mismatch.",
+        "headers": {
+          "x-request-id": {
+            "$ref": "#/components/headers/RequestId"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "examples": {
+              "example": {
+                "value": {
+                  "error": {
+                    "type": "conflict_error",
+                    "code": "metadata_conflict",
+                    "message": "The file changed: it is at metaver 8, not 7.",
+                    "param": "if_match_metaver",
+                    "request_id": "req_7f3c0a1b2c3d4e5f"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "TooManyRequests": {
+        "description": "Rate limit reached (`rate_limit_error`, `rate_limited`): 120 requests/min, 30 mutations/min, 2 concurrent streams per key.",
+        "headers": {
+          "x-request-id": {
+            "$ref": "#/components/headers/RequestId"
+          },
+          "x-ratelimit-limit-requests": {
+            "$ref": "#/components/headers/RateLimitLimit"
+          },
+          "x-ratelimit-remaining-requests": {
+            "$ref": "#/components/headers/RateLimitRemaining"
+          },
+          "x-ratelimit-reset-requests": {
+            "$ref": "#/components/headers/RateLimitReset"
+          },
+          "retry-after": {
+            "$ref": "#/components/headers/RetryAfter"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "examples": {
+              "example": {
+                "value": {
+                  "error": {
+                    "type": "rate_limit_error",
+                    "code": "rate_limited",
+                    "message": "Too many requests.",
+                    "param": null,
+                    "request_id": "req_7f3c0a1b2c3d4e5f"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "ServerError": {
+        "description": "Unexpected server error (`api_error`).",
+        "headers": {
+          "x-request-id": {
+            "$ref": "#/components/headers/RequestId"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "examples": {
+              "example": {
+                "value": {
+                  "error": {
+                    "type": "api_error",
+                    "code": "internal_error",
+                    "message": "Something went wrong.",
+                    "param": null,
+                    "request_id": "req_7f3c0a1b2c3d4e5f"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Unavailable": {
+        "description": "Temporarily unavailable (`api_error`): api_not_configured, upstream_unavailable.",
+        "headers": {
+          "x-request-id": {
+            "$ref": "#/components/headers/RequestId"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "examples": {
+              "example": {
+                "value": {
+                  "error": {
+                    "type": "api_error",
+                    "code": "upstream_unavailable",
+                    "message": "Microstock+ is temporarily unavailable.",
+                    "param": null,
+                    "request_id": "req_7f3c0a1b2c3d4e5f"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/Error"
+          }
+        },
+        "examples": [
+          {
+            "error": {
+              "type": "invalid_request_error",
+              "code": "keywords_too_many",
+              "message": "A file can have at most 50 keywords.",
+              "param": "keywords",
+              "request_id": "req_7f3c0a1b2c3d4e5f"
+            }
+          }
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "type",
+          "code",
+          "message"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "invalid_request_error",
+              "authentication_error",
+              "permission_error",
+              "not_found_error",
+              "conflict_error",
+              "rate_limit_error",
+              "api_error"
+            ]
+          },
+          "code": {
+            "type": "string",
+            "description": "Stable machine-readable code, for example `metadata_conflict`.",
+            "examples": [
+              "metadata_conflict"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable explanation."
+          },
+          "param": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The request field the error is about, if any."
+          },
+          "request_id": {
+            "type": "string",
+            "description": "Same value as the `x-request-id` response header. Omitted on per-item batch errors."
+          }
+        }
+      },
+      "Scope": {
+        "type": "string",
+        "enum": [
+          "account:read",
+          "files:read",
+          "metadata:write",
+          "status:write",
+          "csv:export",
+          "events:read",
+          "ai:quote",
+          "ai:run"
+        ]
+      },
+      "MediaType": {
+        "type": "string",
+        "enum": [
+          "raster",
+          "vector",
+          "video"
+        ]
+      },
+      "FileStatus": {
+        "type": "string",
+        "enum": [
+          "ready",
+          "ignored",
+          "queued",
+          "uploading",
+          "uploaded",
+          "uploadfailed",
+          "submitted",
+          "submitfailed",
+          "approved",
+          "rejected",
+          "approvalfailed",
+          "notready",
+          "scheduled",
+          "cannotbequeued",
+          "nosubmissions"
+        ],
+        "description": "Per-agency status. Stored: ready, ignored, queued, uploading, uploaded, uploadfailed, submitted, submitfailed, approved, rejected, approvalfailed. Derived for display: notready (validation errors), scheduled, cannotbequeued, nosubmissions (submission limit reached)."
+      },
+      "SettableStatus": {
+        "type": "string",
+        "enum": [
+          "ready",
+          "queued",
+          "ignored"
+        ],
+        "description": "`queued` sends the file to the agency (upload and submit)."
+      },
+      "ValidationIssue": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "examples": [
+              "keywords_min"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "examples": [
+              "Less than 7 keywords"
+            ]
+          }
+        }
+      },
+      "AgencyState": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/FileStatus"
+          },
+          "external_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The file's id at the agency, once uploaded."
+          },
+          "uploaded_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When the file was uploaded to the agency."
+          },
+          "submitted_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When the file was submitted for review."
+          },
+          "errors": {
+            "type": "array",
+            "items": {},
+            "description": "Upload or submission errors reported by the agency."
+          },
+          "validation": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ValidationIssue"
+            },
+            "description": "Problems with the metadata for this agency. Reported, not enforced."
+          }
+        }
+      },
+      "Category": {
+        "type": "object",
+        "required": [
+          "cat"
+        ],
+        "properties": {
+          "cat": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sub": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "Metadata": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Left out of `GET /files` results unless `expand=metadata`."
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "In order of importance."
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Category"
+            }
+          },
+          "editorial": {
+            "type": "boolean"
+          },
+          "ai_generated": {
+            "type": "boolean"
+          },
+          "illustration": {
+            "type": "boolean"
+          },
+          "releases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Release ids, for example `rel_123`."
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "File": {
+        "type": "object",
+        "required": [
+          "object",
+          "iid",
+          "type",
+          "folder",
+          "filename",
+          "metaver",
+          "metadata",
+          "agencies"
+        ],
+        "properties": {
+          "object": {
+            "const": "file"
+          },
+          "iid": {
+            "type": "string",
+            "examples": [
+              "6abc74e948864d403ea0c559"
+            ]
+          },
+          "type": {
+            "$ref": "#/components/schemas/MediaType"
+          },
+          "folder": {
+            "type": "string",
+            "examples": [
+              "/foto/26_10_01/N-"
+            ]
+          },
+          "filename": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Upload time to Microstock+."
+          },
+          "archived": {
+            "type": "boolean"
+          },
+          "preview_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          },
+          "thumbnail_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          },
+          "metaver": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Metadata version; +1 on every change. Send it back as `if_match_metaver`."
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/Metadata"
+          },
+          "agencies": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/AgencyState"
+            },
+            "description": "Keyed by agency id (see `GET /me`)."
+          },
+          "has_ai_metadata": {
+            "type": "boolean"
+          }
+        }
+      },
+      "FileList": {
+        "type": "object",
+        "required": [
+          "object",
+          "data",
+          "has_more",
+          "next_cursor"
+        ],
+        "properties": {
+          "object": {
+            "const": "list"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/File"
+            }
+          },
+          "has_more": {
+            "type": "boolean"
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pass as `cursor` to get the next page."
+          }
+        }
+      },
+      "Folder": {
+        "type": "object",
+        "required": [
+          "object",
+          "path",
+          "file_count",
+          "subfolder_count"
+        ],
+        "properties": {
+          "object": {
+            "const": "folder"
+          },
+          "path": {
+            "type": "string",
+            "examples": [
+              "/foto/2026"
+            ]
+          },
+          "file_count": {
+            "type": "integer",
+            "description": "Files directly in this folder."
+          },
+          "subfolder_count": {
+            "type": "integer",
+            "description": "Direct subfolders."
+          },
+          "archived": {
+            "type": "boolean"
+          },
+          "status_summary": {
+            "type": "object",
+            "description": "Per agency, the number of this folder's files in each status.",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer"
+              }
+            },
+            "examples": [
+              {
+                "adobestock": {
+                  "ready": 120,
+                  "submitted": 280
+                }
+              }
+            ]
+          }
+        }
+      },
+      "FolderList": {
+        "type": "object",
+        "required": [
+          "object",
+          "data",
+          "has_more",
+          "next_cursor"
+        ],
+        "properties": {
+          "object": {
+            "const": "list"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Folder"
+            }
+          },
+          "has_more": {
+            "type": "boolean"
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pass as `cursor` to get the next page."
+          }
+        }
+      },
+      "Account": {
+        "type": "object",
+        "required": [
+          "object",
+          "id",
+          "agencies",
+          "key"
+        ],
+        "properties": {
+          "object": {
+            "const": "account"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Display name of the account."
+          },
+          "plan": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "expires_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time",
+                "description": "Plan end."
+              }
+            }
+          },
+          "balance_eur": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Balance used for paid actions such as AI keywording."
+          },
+          "agencies": {
+            "type": "array",
+            "description": "Connected agencies. Use these ids everywhere (for example `adobestock` = Adobe Stock, `esp` = iStock).",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "name"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "settings": {
+            "type": "object",
+            "properties": {
+              "lowercase_keywords": {
+                "type": "boolean",
+                "description": "Keywords are lower-cased on save."
+              },
+              "max_keywords": {
+                "type": "integer",
+                "description": "Maximum keywords per file (default 50)."
+              }
+            }
+          },
+          "limits": {
+            "type": "object",
+            "properties": {
+              "requests_per_minute": {
+                "type": "integer",
+                "examples": [
+                  120
+                ]
+              },
+              "mutations_per_minute": {
+                "type": "integer",
+                "examples": [
+                  30
+                ]
+              },
+              "concurrent_streams": {
+                "type": "integer",
+                "examples": [
+                  2
+                ]
+              },
+              "batch_max_items": {
+                "type": "integer",
+                "examples": [
+                  100
+                ]
+              },
+              "list_max_limit": {
+                "type": "integer",
+                "examples": [
+                  200
+                ]
+              }
+            }
+          },
+          "key": {
+            "type": "object",
+            "required": [
+              "prefix",
+              "scopes"
+            ],
+            "properties": {
+              "prefix": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}$"
+              },
+              "name": {
+                "type": "string"
+              },
+              "scopes": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Scope"
+                }
+              },
+              "created_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time",
+                "description": "Key creation time."
+              },
+              "last_used_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time",
+                "description": "Last use of the key."
+              }
+            }
+          }
+        }
+      },
+      "MetadataPatch": {
+        "type": "object",
+        "description": "Merge patch: only the fields present change. Keywords are trimmed, de-duplicated and lower-cased if the account setting says so.",
+        "properties": {
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "At most 200 characters. `null` clears it; an empty string is rejected (`empty_value`)."
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "description": "Agency length limits (for example 200 characters on Shutterstock) are reported as validation, never cut. `null` clears it."
+          },
+          "keywords": {
+            "type": "object",
+            "description": "Change of keywords: either `set` (the complete new list) or `add` and/or `remove`. `set` cannot be combined with `add` or `remove`.",
+            "properties": {
+              "set": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "maxItems": 50,
+                "description": "Replace all keywords with this list, most important first. An empty list removes all."
+              },
+              "add": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1,
+                "description": "keywords to add after the existing ones."
+              },
+              "remove": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1,
+                "description": "keywords to remove."
+              }
+            },
+            "additionalProperties": false,
+            "minProperties": 1
+          },
+          "categories": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/Category"
+            },
+            "description": "Replaces all categories. `null` clears them."
+          },
+          "editorial": {
+            "type": "boolean"
+          },
+          "ai_generated": {
+            "type": "boolean",
+            "description": "`true` forces `editorial` to `false`; sending both as `true` is rejected (`invalid_combination`)."
+          },
+          "illustration": {
+            "type": "boolean"
+          },
+          "releases": {
+            "type": "object",
+            "description": "Change of releases: either `set` (the complete new list) or `add` and/or `remove`. `set` cannot be combined with `add` or `remove`.",
+            "properties": {
+              "set": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": "Replace all releases with this list. An empty list removes all."
+              },
+              "add": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1,
+                "description": "releases to add after the existing ones."
+              },
+              "remove": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1,
+                "description": "releases to remove."
+              }
+            },
+            "additionalProperties": false,
+            "minProperties": 1
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "description": "Free-text notes. `null` clears them."
+          }
+        },
+        "additionalProperties": false,
+        "minProperties": 1
+      },
+      "PatchMetadataRequest": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "At most 200 characters. `null` clears it; an empty string is rejected (`empty_value`)."
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "description": "Agency length limits (for example 200 characters on Shutterstock) are reported as validation, never cut. `null` clears it."
+          },
+          "keywords": {
+            "type": "object",
+            "description": "Change of keywords: either `set` (the complete new list) or `add` and/or `remove`. `set` cannot be combined with `add` or `remove`.",
+            "properties": {
+              "set": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "maxItems": 50,
+                "description": "Replace all keywords with this list, most important first. An empty list removes all."
+              },
+              "add": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1,
+                "description": "keywords to add after the existing ones."
+              },
+              "remove": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1,
+                "description": "keywords to remove."
+              }
+            },
+            "additionalProperties": false,
+            "minProperties": 1
+          },
+          "categories": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/Category"
+            },
+            "description": "Replaces all categories. `null` clears them."
+          },
+          "editorial": {
+            "type": "boolean"
+          },
+          "ai_generated": {
+            "type": "boolean",
+            "description": "`true` forces `editorial` to `false`; sending both as `true` is rejected (`invalid_combination`)."
+          },
+          "illustration": {
+            "type": "boolean"
+          },
+          "releases": {
+            "type": "object",
+            "description": "Change of releases: either `set` (the complete new list) or `add` and/or `remove`. `set` cannot be combined with `add` or `remove`.",
+            "properties": {
+              "set": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": "Replace all releases with this list. An empty list removes all."
+              },
+              "add": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1,
+                "description": "releases to add after the existing ones."
+              },
+              "remove": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1,
+                "description": "releases to remove."
+              }
+            },
+            "additionalProperties": false,
+            "minProperties": 1
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "description": "Free-text notes. `null` clears them."
+          },
+          "if_match_metaver": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Fail with `409 metadata_conflict` if the file's metaver differs."
+          }
+        },
+        "additionalProperties": false,
+        "minProperties": 1
+      },
+      "BatchMetadataRequest": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "required": [
+                "iid",
+                "patch"
+              ],
+              "properties": {
+                "iid": {
+                  "type": "string"
+                },
+                "patch": {
+                  "$ref": "#/components/schemas/MetadataPatch"
+                },
+                "if_match_metaver": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "dry_run": {
+            "type": "boolean",
+            "default": false,
+            "description": "Validate and return the would-be files without writing anything."
+          }
+        },
+        "additionalProperties": false
+      },
+      "BatchItemResult": {
+        "type": "object",
+        "required": [
+          "iid",
+          "ok"
+        ],
+        "properties": {
+          "iid": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "file": {
+            "$ref": "#/components/schemas/File",
+            "description": "The updated file, or with `dry_run` the would-be file (`ok: true` only)."
+          },
+          "error": {
+            "$ref": "#/components/schemas/Error",
+            "description": "Why this item failed (`ok: false` only); the item was not changed."
+          }
+        }
+      },
+      "BatchResult": {
+        "type": "object",
+        "required": [
+          "object",
+          "results",
+          "succeeded",
+          "failed"
+        ],
+        "properties": {
+          "object": {
+            "const": "batch_result"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BatchItemResult"
+            }
+          },
+          "succeeded": {
+            "type": "integer"
+          },
+          "failed": {
+            "type": "integer"
+          }
+        }
+      },
+      "StatusBatchRequest": {
+        "type": "object",
+        "required": [
+          "iids",
+          "agencies",
+          "status"
+        ],
+        "properties": {
+          "iids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true
+          },
+          "agencies": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "uniqueItems": true,
+            "description": "Connected agency ids."
+          },
+          "status": {
+            "$ref": "#/components/schemas/SettableStatus"
+          }
+        },
+        "additionalProperties": false
+      },
+      "StatusItemResult": {
+        "type": "object",
+        "required": [
+          "iid",
+          "agency",
+          "ok"
+        ],
+        "description": "One result per file and agency.",
+        "properties": {
+          "iid": {
+            "type": "string"
+          },
+          "agency": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/FileStatus",
+            "description": "New status (`ok: true`)."
+          },
+          "previous_status": {
+            "$ref": "#/components/schemas/FileStatus",
+            "description": "Status before the change (`ok: true`)."
+          },
+          "error": {
+            "$ref": "#/components/schemas/Error",
+            "description": "For example `nosubmissions`, `agency_not_connected`, `invalid_status_transition` (`ok: false`)."
+          }
+        }
+      },
+      "StatusBatchResult": {
+        "type": "object",
+        "required": [
+          "object",
+          "results",
+          "succeeded",
+          "failed"
+        ],
+        "properties": {
+          "object": {
+            "const": "batch_result"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StatusItemResult"
+            }
+          },
+          "succeeded": {
+            "type": "integer"
+          },
+          "failed": {
+            "type": "integer"
+          }
+        }
+      },
+      "ExportRequest": {
+        "type": "object",
+        "description": "Either `iids` or `folder`.",
+        "properties": {
+          "iids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 500,
+            "uniqueItems": true
+          },
+          "folder": {
+            "type": "string"
+          },
+          "recursive": {
+            "type": "boolean",
+            "default": false,
+            "description": "With `folder`: include subfolders."
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "default",
+              "with_title",
+              "importable",
+              "with_release_names",
+              "without_categories",
+              "nimia",
+              "alamy"
+            ],
+            "default": "default",
+            "description": "The layouts of Export CSV in My Files. Paid CSV formats are not in v1."
+          },
+          "delimiter": {
+            "type": "string",
+            "enum": [
+              "comma",
+              "semicolon"
+            ],
+            "default": "comma"
+          }
+        },
+        "oneOf": [
+          {
+            "required": [
+              "iids"
+            ]
+          },
+          {
+            "required": [
+              "folder"
+            ]
+          }
+        ]
+      },
+      "Export": {
+        "type": "object",
+        "required": [
+          "object",
+          "format",
+          "rows",
+          "download_url",
+          "expires_at"
+        ],
+        "properties": {
+          "object": {
+            "const": "export"
+          },
+          "id": {
+            "type": "string",
+            "examples": [
+              "exp_1f2e3d4c5b6a"
+            ]
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "default",
+              "with_title",
+              "importable",
+              "with_release_names",
+              "without_categories",
+              "nimia",
+              "alamy"
+            ]
+          },
+          "delimiter": {
+            "type": "string",
+            "enum": [
+              "comma",
+              "semicolon"
+            ]
+          },
+          "rows": {
+            "type": "integer"
+          },
+          "download_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "`GET` it with the same `Authorization` header before `expires_at`."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the download link stops working."
+          }
+        }
+      },
+      "QuoteRequest": {
+        "type": "object",
+        "required": [
+          "iids"
+        ],
+        "properties": {
+          "iids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 1000,
+            "uniqueItems": true
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "replace",
+              "skip"
+            ],
+            "default": "skip",
+            "description": "`replace` rewrites the metadata of every file; `skip` leaves files that already have metadata unchanged and does not bill them."
+          },
+          "template_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "One of the user's AI keywording templates; `null` for the default."
+          }
+        },
+        "additionalProperties": false
+      },
+      "Quote": {
+        "type": "object",
+        "required": [
+          "object",
+          "quote_id",
+          "files",
+          "amount_eur",
+          "expires_at"
+        ],
+        "properties": {
+          "object": {
+            "const": "ai_quote"
+          },
+          "quote_id": {
+            "type": "string"
+          },
+          "files": {
+            "type": "integer",
+            "description": "Billable files."
+          },
+          "amount_eur": {
+            "type": "number",
+            "description": "Maximum charge; only files that succeed are charged."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The quote must be run before this time."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "replace",
+              "skip"
+            ]
+          }
+        }
+      },
+      "RunRequest": {
+        "type": "object",
+        "required": [
+          "quote_id"
+        ],
+        "properties": {
+          "quote_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Job": {
+        "type": "object",
+        "required": [
+          "object",
+          "id",
+          "status"
+        ],
+        "properties": {
+          "object": {
+            "const": "job"
+          },
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "ai_keywording"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "failed"
+            ]
+          },
+          "quote_id": {
+            "type": "string"
+          },
+          "files_total": {
+            "type": "integer"
+          },
+          "files_done": {
+            "type": "integer"
+          },
+          "files_failed": {
+            "type": "integer"
+          },
+          "amount_eur_quoted": {
+            "type": "number"
+          },
+          "amount_eur_charged": {
+            "type": "number",
+            "description": "Charged so far: files done × quoted price per file."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Job creation."
+          },
+          "started_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Processing start."
+          },
+          "finished_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Completion or failure."
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Error"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "Actor": {
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "agent",
+              "user",
+              "system"
+            ]
+          },
+          "key_prefix": {
+            "type": "string",
+            "description": "For `agent`: the key's public prefix."
+          },
+          "key_name": {
+            "type": "string",
+            "description": "For `agent`: the key's name."
+          }
+        }
+      },
+      "EventType": {
+        "type": "string",
+        "enum": [
+          "file.metadata.updated",
+          "file.status.changed",
+          "file.uploaded",
+          "file.submitted",
+          "file.reviewed",
+          "ai.quote.created",
+          "ai.job.started",
+          "ai.job.completed",
+          "ai.job.failed",
+          "export.ready",
+          "key.created",
+          "key.revoked"
+        ]
+      },
+      "Event": {
+        "type": "object",
+        "required": [
+          "object",
+          "id",
+          "type",
+          "created_at",
+          "actor",
+          "data"
+        ],
+        "properties": {
+          "object": {
+            "const": "event"
+          },
+          "id": {
+            "type": "string",
+            "examples": [
+              "evt_01J9Z3"
+            ]
+          },
+          "type": {
+            "$ref": "#/components/schemas/EventType"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When it happened."
+          },
+          "actor": {
+            "$ref": "#/components/schemas/Actor"
+          },
+          "data": {
+            "type": "object",
+            "description": "Depends on `type`: file.metadata.updated: iids, fields, count, folder; file.status.changed: iids, agency, from, to, count; file.uploaded and file.submitted: iids, agency, count; file.reviewed: iids, agency, result (approved or rejected), reason; ai.quote.created: quote_id, files, amount_eur; ai.job.started, ai.job.completed and ai.job.failed: job_id, files_total, files_done, files_failed, amount_eur_charged, error; export.ready: export_id, rows, format; key.created and key.revoked: key_prefix, key_name.",
+            "properties": {
+              "iids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Affected files (at most 50 are listed; see count)."
+              },
+              "count": {
+                "type": "integer"
+              },
+              "folder": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "fields": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "agency": {
+                "type": "string"
+              },
+              "from": {
+                "$ref": "#/components/schemas/FileStatus"
+              },
+              "to": {
+                "$ref": "#/components/schemas/FileStatus"
+              },
+              "result": {
+                "type": "string",
+                "enum": [
+                  "approved",
+                  "rejected"
+                ]
+              },
+              "reason": {
+                "type": "string"
+              },
+              "quote_id": {
+                "type": "string"
+              },
+              "job_id": {
+                "type": "string"
+              },
+              "export_id": {
+                "type": "string"
+              },
+              "amount_eur": {
+                "type": "number"
+              },
+              "amount_eur_charged": {
+                "type": "number"
+              }
+            }
+          }
+        }
+      },
+      "EventList": {
+        "type": "object",
+        "required": [
+          "object",
+          "data",
+          "next_cursor"
+        ],
+        "properties": {
+          "object": {
+            "const": "list"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Event"
+            },
+            "description": "Oldest first."
+          },
+          "has_more": {
+            "type": "boolean",
+            "description": "More matching events are already available; call again at once."
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pass as `since` on the next call. It is the id of the last returned event, or of the newest event when none matched."
+          }
+        }
+      }
+    }
+  }
+}
