@@ -1,11 +1,11 @@
 ---
 name: mplus-portfolio-management
-description: Manage a stock contributor's Microstock+ (M+) portfolio with the microstock-plus tools - audit folders for missing or weak metadata, check per-agency statuses and validation, queue uploads to stock agencies such as Adobe Stock, Shutterstock, iStock and Pond5 after the user approves, export metadata as CSV, and follow uploads, reviews and AI jobs through the event feed. Use when the user mentions Microstock+, M+, microstock.plus, their stock portfolio or My Files, uploading or submitting files to stock agencies, file statuses, rejections, or CSV exports.
+description: Manage a stock contributor's Microstock+ (M+) portfolio with the microstock-plus tools - audit folders for missing or weak metadata, check per-agency statuses, rejection reasons and validation on stock agencies such as Adobe Stock, Shutterstock, iStock and Pond5, export metadata as CSV, and follow the changes made through the event feed. Changing statuses and sending files to agencies (upload and submit) are not available through the tools yet. Use when the user mentions Microstock+, M+, microstock.plus, their stock portfolio or My Files, uploading or submitting files to stock agencies, file statuses, rejections, or CSV exports.
 ---
 
 # Manage a Microstock+ portfolio
 
-Microstock+ keeps the user's stock photos, vectors and videos with their titles, descriptions and keywords, checks the metadata against each agency's rules, and uploads and submits files to agencies. The `microstock-plus` tools act on the account that owns the configured agent key, with less power than the user. For writing metadata and for paid AI keywording, follow the `mplus-keywording` skill.
+Microstock+ keeps the user's stock photos, vectors and videos with their titles, descriptions and keywords, checks the metadata against each agency's rules, and uploads and submits files to agencies. The `microstock-plus` tools act on the account that owns the configured agent key, with less power than the user. For writing metadata, follow the `mplus-keywording` skill.
 
 ## Start
 
@@ -16,8 +16,8 @@ Microstock+ keeps the user's stock photos, vectors and videos with their titles,
 ## Rules
 
 1. **Nothing can be deleted.** No tool deletes anything. If the user asks to delete files, folders or anything else, say that deleting is done by hand in the Microstock+ web interface (My Files). Never claim that something was deleted.
-2. **Ask before sending files to agencies.** Queueing uploads and submits files to external agencies. Show which files go to which agencies, get an explicit yes, then call `mplus_set_status` with `status: "queued"` and `user_confirmed: true`.
-3. **Money needs the user's confirmation.** AI keywording is paid; follow the `mplus-keywording` skill.
+2. **Statuses and uploads are not available yet.** The tools read statuses but can't change them: setting files ready, queueing uploads and submitting to agencies are not available through the agent tools yet. Don't offer or promise them, and never say that files were queued or submitted. If the user asks, say it is coming and that for now they send files from My Files.
+3. **Nothing paid.** Microstock+ AI keywording is not available through the tools yet either, so nothing you can do costs money. Write metadata yourself with the `mplus-keywording` skill.
 4. **Preview metadata batches** with `dry_run: true` before applying them, and pass `if_match_metaver`.
 5. **Keep the agent key out of the conversation.** Never ask the user to paste it into the chat. In Claude Code they set it with `/plugin configure microstock-plus@microstock-plus`.
 
@@ -32,28 +32,29 @@ Change nothing; report and propose.
 2. Page through `next_cursor`. Read the worst files with `mplus_get_file`: `agencies.<id>.validation` says what is wrong, for example `keywords_min` "Less than 7 keywords".
 3. Report a short table (problem, number of files), then the worst files (name, iid, problem), and propose fixes, for example writing the missing metadata with the `mplus-keywording` skill.
 
-## Queue uploads and set statuses
+## Statuses and rejections (read only)
 
-- Agents may set `ready` (prepared, not sent), `queued` (upload and submit) and `ignored` (never send to that agency), for up to 100 files per call.
-- Before queueing, check that the files pass validation for each target agency and that the agencies are connected.
-- Results come per file and agency. Report failures such as `nosubmissions` (the submission limit is used up) or the Pond5 release guard; don't retry them blindly.
-- Then follow progress with `mplus_wait_for_events` (see below).
+- Find files by status with `mplus_list_files`, `agency` + `status`: for example `rejected` on `adobestock`, `notready` on `shutterstock`, or `submitted` (in review).
+- Read the details with `mplus_get_file`: per agency `validation`, `errors` and `rejection_reasons` when the agency gave a reason.
+- You can't change statuses. Suggest which files look ready for which agencies; the user sends them from My Files.
 
 ## Export CSV
 
-`mplus_export_csv` exports up to 500 files from `iids` or a `folder`. Formats are the layouts of Export CSV in My Files: `default` (agency upload forms), `with_title`, `importable` (re-import into Microstock+), `with_release_names`, `without_categories`, `nimia`, `alamy`; delimiter `comma` for agencies or `semicolon` for Excel. With `include_csv: true` the CSV text comes back in the `csv` field: save it unchanged as a `.csv` file when you can write files, and tell the user where it is. Otherwise give the `download_url`, which works with the agent key until `expires_at`. Split bigger exports by subfolder.
+`mplus_export_csv` exports up to 500 files from `iids` or a `folder`. Formats are the layouts of Export CSV in My Files: `default` (agency upload forms), `with_title`, `importable` (re-import into Microstock+), `with_release_names`, `without_categories`, `nimia` (Nimia footage), `alamy` (Alamy video); paid layouts such as the Shutterstock and Pond5 CSVs are not available. Delimiter `comma` for agencies or `semicolon` for Excel. With `include_csv: true` the CSV text comes back in the `csv` field: save it unchanged as a `.csv` file when you can write files, and tell the user where it is. Otherwise give the `download_url`, which works with the agent key until `expires_at`. Split bigger exports by subfolder.
 
-## Follow progress
+## Follow changes
 
-1. Call `mplus_wait_for_events` without a cursor for the most recent events, with `types` to narrow them, for example `["file.status.changed", "file.uploaded", "file.submitted", "file.reviewed"]` for uploads or `["ai.job.completed", "ai.job.failed"]` for an AI job.
+1. Call `mplus_wait_for_events` without a cursor for the most recent events, with `types` to narrow them, for example `["file.metadata.updated", "export.ready"]`. Microstock+ currently reports the changes made through the Agent API and agent key changes; upload, submission and review events are not reported yet.
 2. Call it again with `cursor` set to the previous `next_cursor`. Each call waits up to 25 seconds and returns as soon as something happens.
-3. Report in plain words, for example "12 of 40 files submitted to Adobe Stock; 2 rejected on Shutterstock: <reason>", and stop when the goal is reached or the user asks.
+3. Report in plain words, for example "keywords updated on 38 files in /foto/2026; the CSV with 120 rows is ready".
 
 ## When the tools are missing or fail
 
 - **No `mplus_*` tools.** In Claude Code run `/mcp` and check that the `microstock-plus` server of the plugin is connected; it needs Node.js 18 or newer. In claude.ai chat and Cowork the plugin's local server does not run; explain that and point to https://microstock.plus/ai-agent-skills.
 - **"No Microstock+ agent key is configured"** or **`invalid_api_key` / `revoked_api_key`**: the user creates a key at https://microstock.plus/ai-agent-skills (section "Agent keys") and enters it with `/plugin configure microstock-plus@microstock-plus`, then restarts the session.
 - **`scope_required`**: the key lacks a permission. The user can create a key with that scope; don't work around it.
+- **"Not available yet"** (`not_available_yet` or `endpoint_disabled`): status changes and AI keywording are not in the Agent API yet. Say so; don't retry.
+- **`404 not_found` on every call**: the Agent API is not switched on for this account yet (agent keys open gradually); point to https://microstock.plus/ai-agent-skills.
 - **`rate_limited`**: wait, then continue with fewer, larger batches.
 
 The complete reference, with every endpoint and error code, is `${CLAUDE_PLUGIN_ROOT}/docs/AI_AGENT_SKILLS.md`, also published at https://microstock.plus/ai-agent-skills/skill.md.

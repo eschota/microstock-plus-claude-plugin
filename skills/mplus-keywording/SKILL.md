@@ -1,6 +1,6 @@
 ---
 name: mplus-keywording
-description: Write and improve stock metadata in Microstock+ - titles, descriptions, keywords, and the AI-generated and editorial flags - to the rules of Adobe Stock, Shutterstock, iStock, Pond5 and other agencies, preview the changes with a dry run, apply them in batches without overwriting newer edits, and run paid Microstock+ AI keywording only after the user confirms the quoted price. Use when the user asks for keywords, keywording, titles, descriptions or metadata for stock photos, vectors or videos, wants to fix files that agencies flag or reject, or mentions Microstock+ AI keywording.
+description: Write and improve stock metadata in Microstock+ - titles, descriptions, keywords, categories, and the AI-generated and editorial flags - to the rules of Adobe Stock, Shutterstock, iStock, Pond5 and other agencies, preview the changes with a dry run, and apply them in batches without overwriting newer edits. Microstock+'s own paid AI keywording is not available through the tools yet, so write the metadata yourself. Use when the user asks for keywords, keywording, titles, descriptions or metadata for stock photos, vectors or videos, wants to fix files that agencies flag or reject, or mentions Microstock+ AI keywording.
 ---
 
 # Keyword stock files in Microstock+
@@ -38,21 +38,16 @@ Patch fields: `title`, `description`, `keywords` (`set` for the whole ordered li
 
 The `validation` that the tools return for each agency is the authority; check it after the dry run.
 
-**AI-generated content.** Set `ai_generated: true` for anything made with generative AI; Microstock+ then keeps it non-editorial and passes the flag to agencies that have one. Describe what is shown; don't present AI images as photos of real events, places or people, and don't add tool names such as Midjourney as keywords. Some agencies don't accept generative AI content at all, so check the validation and ask the user before queueing it.
+**AI-generated content.** Set `ai_generated: true` for anything made with generative AI; Microstock+ then keeps it non-editorial and passes the flag to agencies that have one. Describe what is shown; don't present AI images as photos of real events, places or people, and don't add tool names such as Midjourney as keywords. Some agencies don't accept generative AI content at all, so check the validation and point those agencies out to the user.
 
 **Trademarks and people.** In commercial content keep brands, logos, product names, characters, artworks and real people's names out of titles, descriptions and keywords. Editorial content may name them factually.
 
-**Categories and releases.** They are ids (`{"cat": 12, "sub": 3}`, `rel_123`) that the tools can't list. Copy them from files that already have the right ones, or leave them to the user.
+**Categories.** At most 3 per file, as `{"cat": <id>, "sub": <id>}` from the Microstock+ category table; leave out `sub` when no subcategory fits. Categories: 1 Abstract, 2 Animals/Wildlife, 3 Backgrounds/Textures, 4 Beauty/Fashion, 5 Buildings/Landmarks, 6 Business/Finance, 7 Celebrities, 8 Education, 9 Food and Drink, 10 Healthcare/Medical, 11 Holidays, 12 Illustrations/Clip-Art, 13 Industrial, 14 Interiors, 15 Miscellaneous, 16 Nature, 17 Objects, 18 Parks/Outdoor, 19 People, 20 Religion, 21 Science, 22 Signs/Symbols, 23 Sports/Recreation, 24 Technology, 25 The Arts, 26 Transportation, 27 Vintage. The subcategory ids are in the "Category ids" table of the complete reference linked at the end; for example `{"cat": 16, "sub": 7}` is Nature, Plants and trees.
 
-## Paid AI keywording
+**Releases.** They are ids such as `rel_123` that the tools can't list. Copy them from files that already have the right ones, or leave them to the user.
 
-Microstock+ can write titles, descriptions and keywords with its own AI, for money from the user's balance.
+## Microstock+ AI keywording (not available yet)
 
-1. **Quote, free:** `mplus_quote_ai_keywording` with the iids and `mode` (`skip` leaves files that already have metadata unchanged and doesn't bill them; `replace` rewrites all). It returns `quote_id`, the number of billable `files`, `amount_eur` and `expires_at`.
-2. **Ask:** tell the user the exact amount, the number of files and the mode, and ask for explicit confirmation of that amount. An earlier general "go ahead" is not a confirmation of this price.
-3. **Run, paid:** only after the user confirms, call `mplus_run_ai_keywording` with `quote_id` and `confirm_charge_eur` equal to `amount_eur`. Only files that succeed are charged; repeating the call returns the same job and never charges twice.
-4. **Follow:** `mplus_get_job`, or `mplus_wait_for_events` with `types: ["ai.job.completed", "ai.job.failed"]`. Then show the new metadata and the amount charged, and offer to review it.
-
-If `mplus_run_ai_keywording` is missing or answers `scope_required`, the key has no `ai:run` scope (it is off by default): the user can create a key with it at https://microstock.plus/ai-agent-skills, or start AI keywording in the web interface. An expired quote (`quote_expired`) needs a new quote and a new confirmation.
+Microstock+ can write metadata with its own paid AI in My Files, but that is not available through these tools yet: there is no quote or run tool, and the Agent API refuses it (`endpoint_disabled`). Don't offer or promise it, and never say that you started it. Write the metadata yourself with the workflow above; if the user prefers Microstock+'s AI, they can start it in My Files.
 
 The complete reference is `${CLAUDE_PLUGIN_ROOT}/docs/AI_AGENT_SKILLS.md`, also published at https://microstock.plus/ai-agent-skills/skill.md.

@@ -11,7 +11,7 @@
     {
       "name": "microstock-plus",
       "source": "./",
-      "description": "Manage your Microstock+ stock portfolio from Claude: audit and improve titles, descriptions and keywords, preview and apply batch edits, export CSV, queue uploads to stock agencies after you approve them, run paid AI keywording only after you confirm the price, and follow uploads and reviews as they happen. Nothing can be deleted through it."
+      "description": "Manage your Microstock+ stock portfolio from Claude: audit and improve titles, descriptions, keywords and categories, preview and apply batch edits without overwriting newer ones, check statuses and rejections, and export CSV. Queueing uploads and AI keywording are coming later. Nothing can be deleted through it."
     }
   ]
 }

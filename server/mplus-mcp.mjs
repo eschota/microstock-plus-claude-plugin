@@ -34,7 +34,7 @@ import { createInterface } from "node:readline";
 
 const SERVER_NAME = "microstock-plus";
 const SERVER_TITLE = "Microstock+";
-const SERVER_VERSION = "1.0.0";
+const SERVER_VERSION = "1.1.0";
 const SERVER_INFO = Object.freeze({
     name: SERVER_NAME,
     title: SERVER_TITLE,
@@ -141,6 +141,21 @@ const SCOPE_ABILITIES = [
     ["ai:run", "run paid AI keywording"]
 ];
 
+// Status changes (queueing uploads), AI keywording and AI jobs belong to the contract, but the Agent API
+// release that ships now keeps them switched off: it answers 403 endpoint_disabled and keys cannot hold
+// their scopes. Their tools are offered only with MPLUS_ENABLE_PREVIEW_TOOLS=1, for a server that has them on.
+const PREVIEW_TOOLS = /^(1|true|yes)$/i.test(process.env.MPLUS_ENABLE_PREVIEW_TOOLS || "");
+const PREVIEW_SCOPES = new Set(["status:write", "ai:quote", "ai:run"]);
+const NOT_AVAILABLE = Object.freeze({
+    status_changes: "Not available yet (not_available_yet): changing statuses and sending files to stock agencies " +
+        "(upload and submit) is not available through the Microstock+ Agent API yet. Don't offer or promise it; the user " +
+        "changes statuses and sends files in the Microstock+ web interface (My Files).",
+    ai_keywording: "Not available yet (not_available_yet): Microstock+ AI keywording (price quotes, paid runs and job " +
+        "progress) is not available through the Microstock+ Agent API yet. Don't offer or promise it; the user can start " +
+        "AI keywording in the Microstock+ web interface (My Files). You can still write titles, descriptions and keywords " +
+        "yourself and save them with mplus_update_metadata_batch, dry run first."
+});
+
 const INSTRUCTIONS = [
     "Microstock+ (microstock.plus) keeps a stock contributor's photos, vectors and videos with their titles, descriptions",
     "and keywords, and submits them to stock agencies. These tools act only on the account that owns the configured agent key.",
@@ -149,11 +164,16 @@ const INSTRUCTIONS = [
     "with mplus_update_metadata or mplus_update_metadata_batch. Run every batch with dry_run=true first, show the user what",
     "will change, then repeat it with dry_run=false. Pass if_match_metaver so a newer edit is never overwritten; after a",
     "metadata_conflict, re-read the file and merge.",
-    "Ask the user before queueing uploads (mplus_set_status with status queued) and before anything paid: get a quote with",
-    "mplus_quote_ai_keywording, tell the user the exact price, and call mplus_run_ai_keywording only after they confirm that amount.",
+    PREVIEW_TOOLS
+        ? "Ask the user before queueing uploads (mplus_set_status with status queued) and before anything paid: get a quote with " +
+          "mplus_quote_ai_keywording, tell the user the exact price, and call mplus_run_ai_keywording only after they confirm that amount."
+        : "Changing statuses, sending files to stock agencies (upload and submit) and Microstock+ AI keywording are not " +
+          "available through these tools yet: don't offer or promise them; the user does them in the Microstock+ web interface (My Files).",
     "Nothing can be deleted with these tools. If the user asks to delete files, folders or anything else, say that deleting",
     "is done by hand in the Microstock+ web interface (My Files), and never claim that something was deleted.",
-    "Use mplus_wait_for_events to follow uploads, reviews and AI jobs and report progress."
+    PREVIEW_TOOLS
+        ? "Use mplus_wait_for_events to follow uploads, reviews and AI jobs and report progress."
+        : "Use mplus_wait_for_events to follow the changes made through the Agent API (metadata updates and exports)."
 ].join(" ");
 
 const KEY_SETUP_HINT = [
@@ -363,6 +383,8 @@ const ERROR_ADVICE = {
     revoked_api_key: `This agent key was revoked. ${KEY_SETUP_HINT}`,
     scope_required: `The agent key lacks the permission (scope) for this action. The key owner can create a key with that scope at ${KEYS_PAGE_URL}; paid AI keywording needs ai:run, which is off by default.`,
     agent_api_disabled: `The Agent API is disabled for this account; the account owner can enable it at ${KEYS_PAGE_URL}.`,
+    endpoint_disabled: "This part of the Agent API is not available yet. Don't offer or promise it; the user does it in the Microstock+ web interface (My Files).",
+    not_found: `Microstock+ answered that this API path does not exist. The Agent API is probably not switched on for this account yet (agent keys open gradually); see ${KEYS_PAGE_URL}.`,
     not_owner: "That item does not belong to the key owner's account; agents can only work with the key owner's own files.",
     file_not_found: "Check the iid; find files with mplus_list_files.",
     folder_not_found: "Check the folder path; list folders with mplus_list_folders.",
@@ -888,8 +910,13 @@ const PATCH_PROPERTIES = {
         type: "array",
         items: CATEGORY_SCHEMA,
         minItems: 1,
-        maxItems: 10,
-        description: "Categories as {cat, sub} ids. The API cannot list category ids: copy them from files that already have the right category."
+        maxItems: 3,
+        description: "At most 3 categories as {cat, sub} ids from the Microstock+ category table (omit sub for none): " +
+            "1 Abstract, 2 Animals/Wildlife, 3 Backgrounds/Textures, 4 Beauty/Fashion, 5 Buildings/Landmarks, 6 Business/Finance, " +
+            "7 Celebrities, 8 Education, 9 Food and Drink, 10 Healthcare/Medical, 11 Holidays, 12 Illustrations/Clip-Art, " +
+            "13 Industrial, 14 Interiors, 15 Miscellaneous, 16 Nature, 17 Objects, 18 Parks/Outdoor, 19 People, 20 Religion, " +
+            "21 Science, 22 Signs/Symbols, 23 Sports/Recreation, 24 Technology, 25 The Arts, 26 Transportation, 27 Vintage. " +
+            "The subcategory ids are in the AI Agent Skills guide (https://microstock.plus/ai-agent-skills/skill.md)."
     },
     editorial: { type: "boolean", description: "Editorial use only." },
     ai_generated: { type: "boolean", description: "Made with generative AI. true also sets editorial to false." },
@@ -1330,8 +1357,9 @@ async function getAccount(args, ctx) {
     ctx.account.rememberAccount(data);
     const agencies = arrayOf(data.agencies);
     const scopes = arrayOf(data.key?.scopes);
-    const can = SCOPE_ABILITIES.filter(([scope]) => scopes.includes(scope)).map(([, ability]) => ability);
-    const cannot = SCOPE_ABILITIES.filter(([scope]) => !scopes.includes(scope)).map(([, ability]) => ability);
+    const abilities = PREVIEW_TOOLS ? SCOPE_ABILITIES : SCOPE_ABILITIES.filter(([scope]) => !PREVIEW_SCOPES.has(scope));
+    const can = abilities.filter(([scope]) => scopes.includes(scope)).map(([, ability]) => ability);
+    const cannot = abilities.filter(([scope]) => !scopes.includes(scope)).map(([, ability]) => ability);
     const plan = data.plan?.name ? `plan ${data.plan.name}` : "plan unknown";
     const balance = data.balance_eur === undefined || data.balance_eur === null ? "" : `, balance ${formatEur(data.balance_eur)}`;
     const agencyList = agencies.map(agency => ctx.account.agencyLabel(agency.id)).join(", ") || "none";
@@ -1340,6 +1368,7 @@ async function getAccount(args, ctx) {
         `Connected agencies: ${agencyList}.`,
         can.length ? `This key can ${can.join(", ")}.` : "",
         cannot.length ? `It cannot ${cannot.join(", ")}.` : "",
+        PREVIEW_TOOLS ? "" : "Not available through the Agent API yet: status changes and sending files to agencies, and AI keywording; don't offer them.",
         "Nothing can be deleted through the API."
     ].filter(Boolean).join(" ");
     const lines = [
@@ -1747,7 +1776,7 @@ const TOOLS = [
         scope: "account:read",
         alwaysListed: true,
         description: [
-            "Get the Microstock+ account behind the configured agent key: plan, balance in EUR, connected stock agencies",
+            "Get the Microstock+ account behind the configured agent key: plan, balance in EUR (null when not reported), connected stock agencies",
             "with the agency ids the other tools expect (for example adobestock = Adobe Stock, esp = iStock, shutterstock, pond5),",
             "keyword settings, API limits, and the key's name, prefix and scopes (what this key may do).",
             "Call it first in a session. Read-only."
@@ -1911,6 +1940,7 @@ const TOOLS = [
         name: "mplus_set_status",
         title: "Set agency status (queue uploads)",
         scope: "status:write",
+        feature: "status_changes",
         description: [
             `Set the per-agency status of up to ${BATCH_MAX_ITEMS} files: ready (prepared, not sent), queued (send to the agency: upload`,
             "and submit) or ignored (never send to that agency). Queueing sends the user's files to external stock agencies, so",
@@ -1976,6 +2006,7 @@ const TOOLS = [
         name: "mplus_quote_ai_keywording",
         title: "Quote AI keywording (free)",
         scope: "ai:quote",
+        feature: "ai_keywording",
         description: [
             "Get a price quote for Microstock+ AI keywording (AI-written titles, descriptions and keywords) of up to",
             `${AI_MAX_IIDS} files. mode skip leaves files that already have metadata unchanged; mode replace rewrites the metadata of`,
@@ -2005,6 +2036,7 @@ const TOOLS = [
         name: "mplus_run_ai_keywording",
         title: "Run AI keywording (PAID)",
         scope: "ai:run",
+        feature: "ai_keywording",
         description: [
             "PAID: spends money from the user's Microstock+ balance. Runs AI keywording for a quote from mplus_quote_ai_keywording.",
             "Call it only after the user explicitly confirmed the quoted price in this conversation, and pass that price as",
@@ -2044,6 +2076,7 @@ const TOOLS = [
         name: "mplus_get_job",
         title: "Get AI job progress",
         scope: "files:read",
+        feature: "ai_keywording",
         description: [
             "Get the progress of an AI keywording job: status (queued, running, completed or failed), files done and failed",
             "out of the total, and the amount charged so far. Read-only."
@@ -2065,11 +2098,16 @@ const TOOLS = [
         title: "Wait for account events",
         scope: "events:read",
         description: [
-            `Wait up to wait_seconds (at most ${EVENT_WAIT_MAX_S}) for new events on the user's account and return them: metadata updates, status`,
-            "changes per agency (from/to), uploads, submissions, reviews (approved or rejected with the reason), AI quotes and jobs,",
-            "exports and key changes. Returns as soon as events arrive. Without cursor it starts with the most recent events;",
+            `Wait up to wait_seconds (at most ${EVENT_WAIT_MAX_S}) for new events on the user's account and return them.`,
+            PREVIEW_TOOLS
+                ? "Events: metadata updates, status changes per agency (from/to), uploads, submissions, reviews (approved or rejected " +
+                  "with the reason), AI quotes and jobs, exports and key changes."
+                : "Microstock+ currently reports the changes made through the Agent API (metadata updates and exports) and agent key " +
+                  "changes; upload, submission and review events are not reported yet.",
+            "Returns as soon as events arrive. Without cursor it starts with the most recent events;",
             "pass the returned next_cursor as cursor to continue exactly where you left off. Filter with types.",
-            "Use it to watch uploads, reviews or an AI job and to report progress. Read-only."
+            PREVIEW_TOOLS ? "Use it to watch uploads, reviews or an AI job and to report progress. Read-only."
+                : "Use it to confirm what changed and to report progress. Read-only."
         ].join(" "),
         inputSchema: {
             type: "object",
@@ -2099,10 +2137,17 @@ const TOOLS = [
 ];
 
 const TOOL_INDEX = new Map(TOOLS.map(tool => [tool.name, tool]));
+// Tools of features the Agent API does not offer yet stay out of tools/list unless MPLUS_ENABLE_PREVIEW_TOOLS=1.
+const OFFERED_TOOLS = PREVIEW_TOOLS ? TOOLS : TOOLS.filter(tool => !tool.feature);
 
 function visibleTools(scopes) {
-    if (!scopes) return TOOLS;
-    return TOOLS.filter(tool => tool.alwaysListed || !tool.scope || scopes.includes(tool.scope));
+    if (!scopes) return OFFERED_TOOLS;
+    return OFFERED_TOOLS.filter(tool => tool.alwaysListed || !tool.scope || scopes.includes(tool.scope));
+}
+
+// The same answer whether the tool is not offered here or the API refuses it with 403 endpoint_disabled.
+function notAvailableResult(tool) {
+    return { content: [{ type: "text", text: NOT_AVAILABLE[tool.feature] }], isError: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -2245,6 +2290,8 @@ function emitLog(env, level, data) {
 async function callTool(params, env) {
     const tool = typeof params.name === "string" ? TOOL_INDEX.get(params.name) : undefined;
     if (!tool) throw new RpcError(RPC_ERROR.invalidParams, `Unknown tool: ${params.name}`);
+    // A client that cached an older tool list may still call these: answer without contacting the API.
+    if (tool.feature && !PREVIEW_TOOLS) return notAvailableResult(tool);
     const args = params.arguments === undefined ? {} : params.arguments;
     if (!isPlainObject(args)) throw new RpcError(RPC_ERROR.invalidParams, "Tool arguments must be a JSON object.");
     try {
@@ -2284,6 +2331,10 @@ function checkOutput(tool, value) {
 
 function describeFailure(tool, error) {
     if (error instanceof ToolInputError) return `Invalid input for ${tool.name}: ${error.message}`;
+    if (error instanceof ApiError && error.code === "endpoint_disabled" && tool.feature) {
+        log(`${tool.name}: ${error.status} endpoint_disabled${error.requestId ? ` (${error.requestId})` : ""}`);
+        return NOT_AVAILABLE[tool.feature];
+    }
     if (error instanceof ApiError) {
         log(`${tool.name}: ${error.status || "no response"} ${error.code}${error.requestId ? ` (${error.requestId})` : ""}`);
         return describeApiError(error);
@@ -2586,6 +2637,11 @@ Environment:
                    Create one at ${KEYS_PAGE_URL} (section "Agent keys").
   MPLUS_API_BASE   Agent API base URL. Default ${DEFAULT_API_BASE}
   MPLUS_MCP_DEBUG  1 logs every API request (method, path, status) to stderr.
+  MPLUS_ENABLE_PREVIEW_TOOLS
+                   1 also offers mplus_set_status, mplus_quote_ai_keywording,
+                   mplus_run_ai_keywording and mplus_get_job. The Agent API does not
+                   offer status changes or AI keywording yet; without this setting
+                   those tools are hidden and answer "not available yet".
 
 In HTTP mode each request sends its own key as "Authorization: Bearer mpk_live_...".
 Nothing can be deleted through this server; deleting is done in the Microstock+ web interface.
@@ -2615,6 +2671,7 @@ function announce(config) {
     else if (!config.apiKey) log(`warning: no agent key configured; tools will explain how to add one (${KEYS_PAGE_URL}).`);
     const key = config.apiKey ? `key prefix ${keyPrefix(config.apiKey)}` : "no key";
     log(`${SERVER_TITLE} MCP server ${SERVER_VERSION} on stdio; API ${config.apiBase || "(invalid)"}; ${key}.`);
+    if (PREVIEW_TOOLS) log("preview tools are on (MPLUS_ENABLE_PREVIEW_TOOLS): status changes and AI keywording tools are offered.");
 }
 
 function main(argv) {

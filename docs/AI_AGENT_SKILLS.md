@@ -16,28 +16,27 @@ Microstock+ (M+) is a workspace for stock contributors. It keeps their photos, v
 
 With an agent key you work **as the user, with less power than the user**. You can:
 
-- read folders, files, metadata, per-agency statuses and validation;
+- read folders, files, metadata, per-agency statuses, rejection reasons and validation;
 - edit metadata, one file at a time or in batches with a dry run;
-- set per-agency statuses, including queueing uploads to agencies;
 - export metadata as CSV;
-- get a price quote for AI keywording and, after the user confirms the price, run it (paid);
-- watch an event feed to follow uploads, reviews and jobs.
+- watch an event feed of the changes made through the Agent API.
+
+**Not available yet.** Changing statuses (including sending files to agencies for upload and submit), Microstock+ AI keywording (price quotes, paid runs and job progress) and the Server-Sent Events stream belong to the contract but are switched off in the current release: the API answers `403 endpoint_disabled`, keys can't get the `status:write`, `ai:quote` and `ai:run` scopes, and the MCP server doesn't offer those tools. Don't offer or promise these features, and never say that you queued, submitted or paid for anything. If the user asks for them, say they are coming, and that for now the user does them in the Microstock+ web interface (My Files). Instead of AI keywording you can write titles, descriptions and keywords yourself (workflows B and C).
 
 ## Rules you must follow
 
 1. **Only the key owner's account.** Every call acts on the account that owns the key. There is no access to other users or to folders shared by other people.
 2. **Nothing can be deleted.** No endpoint, tool, scope or flag deletes files, folders, releases, templates, agencies or the account; any `DELETE` request answers `405 deletion_not_supported`. If the user asks you to delete something, say that deleting is done by hand in the Microstock+ web interface (My Files), and never claim that you deleted anything.
-3. **Money needs a human.** AI keywording costs money. Get a quote first, tell the user the exact amount, and run it only after the user explicitly agrees to that amount. Running needs the `ai:run` scope, which is off by default.
-4. **Ask before sending files to agencies.** Setting `queued` uploads and submits the user's files to external agencies. Show which files go to which agencies and get an explicit yes first.
-5. **Preview before you write.** Run every metadata batch with `dry_run: true` first, show the planned changes, then apply them.
-6. **Never overwrite a newer edit.** Send `if_match_metaver` with every change. On `409 metadata_conflict`, re-read the file and merge.
-7. **Don't invent ids.** The API cannot list category, release or AI template ids. Reuse ids that already appear on the user's files, or leave those fields to the user.
-8. **Keep the key secret.** Never print, log, store in files or repositories, or send the key anywhere except `https://microstock.plus`.
-9. **Everything you do is visible.** The user sees agent changes live (a popup queue in My Files and the event feed), can undo metadata changes from the metadata history, and every call is audited with the key's prefix.
+3. **No spending, no uploads.** Nothing an agent can do today costs money or sends files anywhere: AI keywording and status changes are not available yet (see above). When they arrive, AI keywording will need the user's explicit confirmation of a quoted price, and sending files to agencies an explicit yes for the files and agencies.
+4. **Preview before you write.** Run every metadata batch with `dry_run: true` first, show the planned changes, then apply them.
+5. **Never overwrite a newer edit.** Send `if_match_metaver` with every change. On `409 metadata_conflict`, re-read the file and merge.
+6. **Don't invent ids.** Categories come from the fixed table in the reference below. The API cannot list release or AI template ids: reuse ids that already appear on the user's files, or leave those fields to the user.
+7. **Keep the key secret.** Never print, log, store in files or repositories, or send the key anywhere except `https://microstock.plus`.
+8. **Everything you do is visible.** Changes are saved to the user's files at once and show up in My Files; the user can undo metadata changes from the metadata history, and every call is audited with the key's prefix.
 
 ## Authentication
 
-1. The user signs in at https://microstock.plus/ai-agent-skills and creates a key in the **Agent keys** section: a name (for example "Claude Code") and scopes. The full key is shown **once**. A user can have up to 10 active keys; each shows its prefix, scopes, creation and last-use time and request count, and can be rotated (new secret, same name and scopes) or revoked (takes effect within 30 seconds).
+1. The user signs in at https://microstock.plus/ai-agent-skills and creates a key in the **Agent keys** section: a name (for example "Claude Code") and scopes. The full key is shown **once**. A user can have up to 10 active keys; each shows its prefix, scopes, creation and last-use time and request count, and can be rotated (new secret, same name and scopes) or revoked (takes effect within 30 seconds). Agent keys open gradually: while the Agent API is not switched on for an account, every call answers `404 not_found`.
 2. Send the key on every request:
 
    ```http
@@ -51,21 +50,23 @@ With an agent key you work **as the user, with less power than the user**. You c
 | Scope | Allows | Default |
 | - | - | - |
 | `account:read` | `GET /me` | on |
-| `files:read` | folders, files, file details and validation, AI job progress | on |
+| `files:read` | folders, files, file details and validation | on |
 | `metadata:write` | metadata patch and batch | on |
-| `status:write` | status batch (`ready`, `queued`, `ignored`) | on |
 | `csv:export` | free CSV exports | on |
-| `events:read` | event feed and stream | on |
-| `ai:quote` | AI keywording price quote | on |
-| `ai:run` | AI keywording run (charges the balance) | **off** |
+| `events:read` | event feed (long poll) | on |
+| `status:write` | status batch (`ready`, `queued`, `ignored`) | not available yet |
+| `ai:quote` | AI keywording price quote | not available yet |
+| `ai:run` | AI keywording run (charges the balance) | not available yet |
 
-There is no delete scope, and none can be added. `GET /me` (`mplus_get_account`) shows the current key's scopes.
+Keys can hold only the first five scopes today; the last three can't be added until their endpoints are switched on (`ai:run` will then be off by default). There is no delete scope, and none can be added. `GET /me` (`mplus_get_account`) shows the current key's scopes; its `balance_eur` is `null` in this release.
 
 ## Connect
 
 ### MCP server (recommended)
 
 `mplus-mcp.mjs` is a single-file MCP server with no dependencies. It needs Node.js 18 or newer and the key in the `MPLUS_API_KEY` environment variable, and it talks only to `https://microstock.plus` over HTTPS. Download it from https://microstock.plus/ai-agent-skills/mplus-mcp.mjs?download=1 and use an absolute path in the snippets below.
+
+The tools for status changes and AI keywording (`mplus_set_status`, `mplus_quote_ai_keywording`, `mplus_run_ai_keywording`, `mplus_get_job`) are hidden and answer "not available yet" unless the server runs with `MPLUS_ENABLE_PREVIEW_TOOLS=1`; leave that off with the current API.
 
 **Claude Code, with the plugin.** The `microstock-plus` plugin bundles the server, two skills and three commands, and keeps the key in the system's secure credential store. After you add the marketplace that hosts the plugin:
 
@@ -147,15 +148,15 @@ curl -s https://microstock.plus/api/agent/v1/me -H "Authorization: Bearer $MPLUS
 | `mplus_get_file` | `GET /files/{iid}` | `files:read` | One file: full metadata, metaver, statuses, validation |
 | `mplus_update_metadata` | `PATCH /files/{iid}/metadata` | `metadata:write` | Merge-patch one file |
 | `mplus_update_metadata_batch` | `POST /files/metadata:batch` | `metadata:write` | Up to 100 patches, per-item results, `dry_run` |
-| `mplus_set_status` | `POST /files/status:batch` | `status:write` | Set `ready`, `queued` or `ignored` per agency |
+| `mplus_set_status` | `POST /files/status:batch` | `status:write` | **Not available yet** (`403 endpoint_disabled`): set `ready`, `queued` or `ignored` per agency |
 | `mplus_export_csv` | `POST /exports/csv` | `csv:export` | CSV export (free formats) |
-| `mplus_quote_ai_keywording` | `POST /ai/keywording:quote` | `ai:quote` | Price quote, free |
-| `mplus_run_ai_keywording` | `POST /ai/keywording:run` | `ai:run` | Run a quote, **paid** |
-| `mplus_get_job` | `GET /jobs/{id}` | `files:read` | AI job progress |
+| `mplus_quote_ai_keywording` | `POST /ai/keywording:quote` | `ai:quote` | **Not available yet**: AI keywording price quote |
+| `mplus_run_ai_keywording` | `POST /ai/keywording:run` | `ai:run` | **Not available yet**: run a quote, paid |
+| `mplus_get_job` | `GET /jobs/{id}` | `files:read` | **Not available yet**: AI job progress |
 | `mplus_wait_for_events` | `GET /events` | `events:read` | Long-poll the event feed (up to 25 s) |
-| — | `GET /events/stream` | `events:read` | Server-Sent Events, resume with `Last-Event-ID` |
+| — | `GET /events/stream` | `events:read` | **Not available yet**: Server-Sent Events |
 
-Start a session with `mplus_get_account` (`GET /me`): it tells you which agencies are connected, their ids, and what the key may do. When the key can read its account, the MCP server lists only the tools its scopes allow, so `mplus_run_ai_keywording` appears only for keys with `ai:run`.
+Start a session with `mplus_get_account` (`GET /me`): it tells you which agencies are connected, their ids, and what the key may do. When the key can read its account, the MCP server lists only the tools its scopes allow; the four tools marked "not available yet" are not offered at all in this release.
 
 ## Workflows
 
@@ -196,7 +197,7 @@ curl -s "https://microstock.plus/api/agent/v1/files?folder=/foto/2026&recursive=
 | Adobe Stock (`adobestock`) | 5-49 | title up to 200 characters | Order matters: Adobe weights the first keywords most, so put the 10 most important first. |
 | Shutterstock (`shutterstock`) | 7-50 | description up to 200 characters, at least 5 words | Prefer single words over phrases. |
 | iStock (`esp`) | 5-49 | title up to 255 characters | iStock maps keywords onto Getty's controlled vocabulary when the file is submitted; words that don't map are dropped or need disambiguation in iStock. Use common English nouns and adjectives. |
-| Pond5 (`pond5`) | 1-50, at most 79 words in total | title 3-80 characters, description up to 500 | Queueing for Pond5 checks releases (Pond5 release guard). |
+| Pond5 (`pond5`) | 1-50, at most 79 words in total | title 3-80 characters, description up to 500 | Microstock+ checks releases before files go to Pond5 (Pond5 release guard). |
 | Dreamstime (`dreamstime`) | 10-80 | title up to 130 characters | |
 | Alamy (`alamy`) | at least 3 | title up to 150 characters | |
 | Depositphotos (`depositphotos`) | at least 8 | title and description 6-250 characters | |
@@ -207,11 +208,11 @@ These numbers are Microstock+'s validation settings at the time of writing. The 
 
 - Set `ai_generated: true` for anything made with generative AI. Microstock+ then sets `editorial: false` (AI content is never editorial; asking for both is refused) and passes the flag to agencies that have one, such as Adobe Stock's generative AI flag.
 - Describe what the image shows. Don't present AI images as photos of real events, places or people, and don't add tool names such as Midjourney or Stable Diffusion as keywords.
-- Agencies' AI policies differ and change, and some agencies don't accept generative AI content at all. Check the validation and ask the user before queueing AI content.
+- Agencies' AI policies differ and change, and some agencies don't accept generative AI content at all. Check each agency's validation and point out to the user the agencies that refuse such content.
 
 **Trademarks and people.** In commercial (non-editorial) content, keep brand names, logos, product names, characters, artworks and the names of real people out of titles, descriptions and keywords. Editorial content may name them factually.
 
-**Categories and releases.** Categories are `{"cat": 12, "sub": 3}` ids and releases are ids such as `rel_123`. The API can't list either, so copy ids from files that already have the right ones, or leave them to the user.
+**Categories and releases.** A file has at most 3 categories, each `{"cat": 16, "sub": 7}` (Nature, Plants and trees) from the table in the reference below; leave out `sub` when no subcategory fits. Releases are ids such as `rel_123` that the API can't list: copy them from files that already have the right ones, or leave them to the user.
 
 ### C. Preview and apply a batch (dry run, metaver conflicts)
 
@@ -232,27 +233,9 @@ curl -s -X POST https://microstock.plus/api/agent/v1/files/metadata:batch \
                  "keywords": {"add": ["golden", "fall", "trees", "aerial"]}}}]}'
 ```
 
-### D. Set statuses and queue uploads
+### D. Statuses and uploads (not available yet)
 
-Statuses are per file and per agency. An agent may set three:
-
-| Status | Meaning |
-| - | - |
-| `ready` | Prepared, not sent. Use it to take a file out of the queue or out of `ignored`. |
-| `queued` | Send to the agency: Microstock+ uploads and submits it. |
-| `ignored` | Never send this file to that agency. |
-
-1. Check the files first: their validation for each target agency, and that the agencies are connected (`mplus_get_account`).
-2. Show the user which files go to which agencies and ask for an explicit yes.
-3. `mplus_set_status` with `status: "queued"` and `user_confirmed: true` (`POST /files/status:batch`, up to 100 files). The MCP tool refuses `queued` without `user_confirmed: true`.
-4. Read the per-item results: one per file and agency. The same rules as in the web interface apply, so single items can fail, for example `nosubmissions` when the user's submission limit is reached, or the Pond5 release guard. Report failures; don't retry them blindly.
-5. Follow the uploads with workflow G.
-
-```bash
-curl -s -X POST https://microstock.plus/api/agent/v1/files/status:batch \
-  -H "Authorization: Bearer $MPLUS_API_KEY" -H "Content-Type: application/json" -H "Idempotency-Key: $(uuidgen)" \
-  -d '{"iids": ["6abc74e948864d403ea0c559"], "agencies": ["adobestock", "shutterstock"], "status": "queued"}'
-```
+Reading statuses works: `mplus_list_files` with `agency` and `status` (for example every file `rejected` on Adobe Stock), and `mplus_get_file` for one file, with `rejection_reasons` when the agency gave any. Changing them is not available yet: `POST /files/status:batch` answers `403 endpoint_disabled`, keys can't get `status:write`, and the MCP server doesn't offer `mplus_set_status`. Don't offer or promise to set `ready`, `queued` (send to the agency: upload and submit) or `ignored`. When files are ready, tell the user which files and agencies you suggest, and that they send them from My Files.
 
 ### E. Export CSV
 
@@ -277,53 +260,36 @@ curl -s -X POST https://microstock.plus/api/agent/v1/exports/csv \
   -d '{"folder": "/foto/2026", "recursive": true, "format": "with_title", "delimiter": "comma"}' -o foto-2026.csv
 ```
 
-Paid CSV formats are not available in v1.
+Paid CSV layouts of My Files, such as the Shutterstock and Pond5 CSVs, are not available through the API. An export holds at most 500 files (`export_too_large` otherwise): split bigger folders by subfolder.
 
-### F. AI keywording: quote, confirm, run
+### F. Microstock+ AI keywording (not available yet)
 
-1. Quote, free: `mplus_quote_ai_keywording` with the iids and a `mode` (`POST /ai/keywording:quote`). `skip` leaves files that already have metadata unchanged and doesn't bill them; `replace` rewrites the metadata of every listed file. The quote returns `quote_id`, the number of billable `files`, `amount_eur` and `expires_at`.
-2. Tell the user the exact amount, the number of files and the mode, and ask for explicit confirmation. Don't run it on your own initiative, and don't treat a general "go ahead" from earlier as approval of this amount.
-3. Run, paid: `mplus_run_ai_keywording` with `quote_id` and `confirm_charge_eur` equal to the quoted amount (`POST /ai/keywording:run` with an `Idempotency-Key`). The MCP tool refuses a different amount, and a quote it did not create itself. Only files that succeed are charged, at the quoted price. Repeating the call for the same quote returns the same job and never charges twice; over HTTP, reuse the same `Idempotency-Key` when you retry.
-4. Follow the job with `mplus_get_job` (`GET /jobs/{id}`) or with events `ai.job.completed` and `ai.job.failed`, then show the user the new metadata and the amount charged.
-
-If the key lacks `ai:run`, the run fails with `403 scope_required`: the user can create a key with that scope, or start AI keywording in the web interface. An expired quote fails with `409 quote_expired`: get a new quote and confirm the new price.
-
-```bash
-curl -s -X POST https://microstock.plus/api/agent/v1/ai/keywording:quote \
-  -H "Authorization: Bearer $MPLUS_API_KEY" -H "Content-Type: application/json" -H "Idempotency-Key: $(uuidgen)" \
-  -d '{"iids": ["6abc74e948864d403ea0c559", "6abc74e948864d403ea0c560"], "mode": "skip", "template_id": null}'
-# Only after the user confirmed amount_eur:
-curl -s -X POST https://microstock.plus/api/agent/v1/ai/keywording:run \
-  -H "Authorization: Bearer $MPLUS_API_KEY" -H "Content-Type: application/json" \
-  -H "Idempotency-Key: 4f8b1e1c-2a8e-4c7e-9a43-0c6f7d3b9e21" \
-  -d '{"quote_id": "q_..."}'
-```
+Microstock+'s own paid AI keywording (a free price quote, then a paid run, then job progress) is not available through the Agent API yet: its endpoints answer `403 endpoint_disabled` and keys can't get `ai:quote` or `ai:run`. Don't offer or promise it, and never say that you started it or paid for it. Instead, write the titles, descriptions and keywords yourself with workflows B and C, or tell the user that they can start AI keywording in My Files. When it arrives here, it will need the user's explicit confirmation of a quoted price.
 
 ### G. Watch events and report progress
 
-The event feed shows everything that happens on the account, including what the user and Microstock+ do. Each event has `id`, `type`, `created_at`, `actor` (`agent` with the key's prefix and name, `user`, or `system`) and `data`.
+The event feed currently shows the changes made through the Agent API (metadata updates and exports by agents) and agent key changes. Events about status changes, uploads, submissions, reviews and AI jobs belong to the contract but are not reported yet. Each event has `id`, `type`, `created_at`, `actor` (`agent` with the key's prefix and name, `user`, or `system`) and `data`.
 
-| Type | `data` |
-| - | - |
-| `file.metadata.updated` | `iids`, `fields`, `count`, `folder` |
-| `file.status.changed` | `iids`, `agency`, `from`, `to`, `count` |
-| `file.uploaded`, `file.submitted` | `iids`, `agency`, `count` |
-| `file.reviewed` | `iids`, `agency`, `result` (`approved` or `rejected`), `reason` |
-| `ai.quote.created` | `quote_id`, `files`, `amount_eur` |
-| `ai.job.started`, `ai.job.completed`, `ai.job.failed` | `job_id`, `files_total`, `files_done`, `files_failed`, `amount_eur_charged` |
-| `export.ready` | `export_id`, `rows`, `format` |
-| `key.created`, `key.revoked` | `key_prefix`, `key_name` |
+| Type | `data` | Reported now |
+| - | - | - |
+| `file.metadata.updated` | `iids`, `fields`, `count`, `folder` | yes |
+| `export.ready` | `export_id`, `rows`, `format` | yes |
+| `key.created`, `key.revoked` | `key_prefix`, `key_name` | yes |
+| `file.status.changed` | `iids`, `agency`, `from`, `to`, `count` | not yet |
+| `file.uploaded`, `file.submitted` | `iids`, `agency`, `count` | not yet |
+| `file.reviewed` | `iids`, `agency`, `result` (`approved` or `rejected`), `reason` | not yet |
+| `ai.quote.created` | `quote_id`, `files`, `amount_eur` | not yet |
+| `ai.job.started`, `ai.job.completed`, `ai.job.failed` | `job_id`, `files_total`, `files_done`, `files_failed`, `amount_eur_charged` | not yet |
 
-1. `mplus_wait_for_events` without a cursor returns the most recent events; with `types` it returns only those (`GET /events?types=file.status.changed,file.reviewed,ai.job.completed`).
+1. `mplus_wait_for_events` without a cursor returns the most recent events; with `types` it returns only those (`GET /events?types=file.metadata.updated,export.ready`).
 2. Keep calling it with `cursor` set to the previous `next_cursor` (`GET /events?since=<next_cursor>&wait=25`). Each call waits up to 25 seconds and returns as soon as something happens; `has_more: true` means call again at once.
-3. Report progress in plain words ("12 of 40 files submitted to Adobe Stock; 2 rejected on Shutterstock: <reason>") and stop when the user's goal is reached or the user asks.
+3. Report in plain words ("keywords updated on 38 files in /foto/2026; the CSV with 120 rows is ready") and stop when the user's goal is reached or the user asks.
 
-Events are kept for 7 days. Over HTTP you can also hold one Server-Sent Events stream (`GET /events/stream`, at most 2 per key) and resume it with `Last-Event-ID`. MCP clients that ask for log messages also receive notable events (reviews, failures, finished jobs) as `notifications/message`.
+Events are kept for 7 days. The Server-Sent Events stream (`GET /events/stream`) is not available yet (`403 endpoint_disabled`); long-poll `GET /events` with `wait` instead. MCP clients that ask for log messages also receive notable events as `notifications/message`.
 
 ```bash
-curl -s "https://microstock.plus/api/agent/v1/events?since=evt_01J9Z3&types=file.status.changed,file.reviewed&wait=25" \
+curl -s "https://microstock.plus/api/agent/v1/events?since=evt_01J9Z3&types=file.metadata.updated,export.ready&wait=25" \
   -H "Authorization: Bearer $MPLUS_API_KEY"
-curl -N https://microstock.plus/api/agent/v1/events/stream -H "Authorization: Bearer $MPLUS_API_KEY"
 ```
 
 ## Reference
@@ -354,7 +320,7 @@ curl -N https://microstock.plus/api/agent/v1/events/stream -H "Authorization: Be
 }
 ```
 
-Also `size_bytes`, `created_at`, `archived`, `preview_url`, `thumbnail_url`; `type` is `raster`, `vector` or `video`. The full schemas are in the OpenAPI document.
+Also `size_bytes`, `created_at`, `updated_at`, `archived`, `preview_url`, `thumbnail_url`; `type` is `raster`, `vector` or `video`. An agency entry can also carry `reviewed_at`, `scheduled_at` and `rejection_reasons`. The full schemas are in the OpenAPI document.
 
 ### Statuses
 
@@ -367,7 +333,7 @@ Also `size_bytes`, `created_at`, `archived`, `preview_url`, `thumbnail_url`; `ty
 | `uploaded` | On the agency, not submitted yet |
 | `uploadfailed`, `submitfailed` | That step failed; see `errors` |
 | `submitted` | Sent for review |
-| `approved`, `rejected` | Review result; `file.reviewed` events carry the reason |
+| `approved`, `rejected` | Review result; `rejection_reasons` on the agency entry says why, when the agency gave a reason |
 | `approvalfailed` | Submitted, but missing at the agency |
 | `notready` | Metadata fails that agency's validation |
 | `scheduled` | An upload is scheduled for that agency |
@@ -377,6 +343,40 @@ Also `size_bytes`, `created_at`, `archived`, `preview_url`, `thumbnail_url`; `ty
 ### Agency ids
 
 Use the ids from `GET /me` (`mplus_get_account`); the common ones are `adobestock` (Adobe Stock), `shutterstock`, `esp` (iStock), `pond5`, `alamy`, `dreamstime`, `123rf` and `depositphotos`.
+
+### Category ids
+
+Set categories as `{"cat": <id>, "sub": <id>}`, at most 3 per file; leave out `sub` when no subcategory fits. The ids are fixed: new ones are only ever added.
+
+| `cat` | Category | `sub` ids |
+| - | - | - |
+| 1 | Abstract | 1 Miscellaneous, 2 Backgrounds, 3 Lights and Colors, 4 Shapes, 5 Blurs |
+| 2 | Animals/Wildlife | 1 Birds, 2 Pets, 3 Sea and Ocean life, 4 Insects, 5 Farm animals, 6 Miscellaneous |
+| 3 | Backgrounds/Textures | 1 Textures, 2 Backgrounds, 3 Miscellaneous |
+| 4 | Beauty/Fashion | 1 Clothing, 2 Parfume, 3 Miscellaneous |
+| 5 | Buildings/Landmarks | 1 Miscellaneous, 2 Historic buildings, 3 Indoor, 4 Outdoor, 5 Modern Building |
+| 6 | Business/Finance | 1 Miscellaneous, 2 Financial, 3 People, 4 Objects |
+| 7 | Celebrities | 1 Miscellaneous, 2 Holidays |
+| 8 | Education | 1 Miscellaneous, 2 Objects, 3 School, College, University etc |
+| 9 | Food and Drink | 1 Miscellaneous, 2 Food, 3 Drink |
+| 10 | Healthcare/Medical | 1 Miscellaneous, 2 Objects |
+| 11 | Holidays | 1 Miscellaneous, 2 Objects |
+| 12 | Illustrations/Clip-Art | 1 Miscellaneous, 2 2D, 3 3D, 4 Vector |
+| 13 | Industrial | 1 Miscellaneous, 2 Power and Energy, 3 Construction, 4 Manufacturing, 5 Military |
+| 14 | Interiors | 1 Miscellaneous, 2 Objects, 3 Furniture |
+| 15 | Miscellaneous | 1 Miscellaneous |
+| 16 | Nature | 1 Miscellaneous, 2 Sky, 3 Sea/Ocean/River, 4 Parks, 5 Flowers, 6 Underwater, 7 Plants and trees |
+| 17 | Objects | 1 Miscellaneous, 2 Electronics, 3 Isolated, 4 Sports |
+| 18 | Parks/Outdoor | 1 Miscellaneous |
+| 19 | People | 1 Miscellaneous, 2 Babies, 3 Men, 4 Women, 5 Families, 6 Teens |
+| 20 | Religion | 1 Miscellaneous |
+| 21 | Science | 1 Miscellaneous |
+| 22 | Signs/Symbols | 1 Miscellaneous |
+| 23 | Sports/Recreation | 1 Miscellaneous |
+| 24 | Technology | 1 Miscellaneous, 2 Computers, 3 Electronics |
+| 25 | The Arts | 1 Miscellaneous |
+| 26 | Transportation | 1 Miscellaneous, 2 Cars, 3 Trucks, 4 Water transport, 5 Airplanes |
+| 27 | Vintage | 1 Miscellaneous |
 
 ### Errors
 
@@ -393,27 +393,36 @@ Branch on `type` and `code`, never on `message`. The MCP tools return errors as 
 | - | - | - | - |
 | 400 | `invalid_request_error` | `invalid_json`, `missing_param`, `invalid_status`, `batch_too_large` | Fix the request; `param` names the field. Batches take at most 100 items. |
 | 401 | `authentication_error` | `invalid_api_key`, `revoked_api_key` | Stop. Ask the user for a new key from https://microstock.plus/ai-agent-skills. |
-| 403 | `permission_error` | `scope_required`, `not_owner`, `agent_api_disabled` | Tell the user which scope or setting is missing; don't work around it. |
-| 404 | `not_found_error` | `file_not_found`, `folder_not_found`, `job_not_found` | Check the id or path; list again. |
+| 403 | `permission_error` | `scope_required`, `not_owner`, `endpoint_disabled` | Tell the user which scope is missing; don't work around it. `endpoint_disabled`: the feature is not available yet; say so and don't retry. |
+| 404 | `not_found_error` | `file_not_found`, `folder_not_found`, `export_not_found`, `not_found` | Check the id or path; list again. `not_found` on every call: the Agent API is not switched on for this account yet. |
 | 405 | `permission_error` | `deletion_not_supported` | Deleting is manual in the web interface. Tell the user so. |
-| 409 | `conflict_error` | `metadata_conflict`, `quote_expired`, `idempotency_mismatch` | Re-read and merge; get a new quote and confirm it; use a fresh Idempotency-Key for a different request. |
+| 409 | `conflict_error` | `metadata_conflict`, `idempotency_mismatch`, `file_archived`, `file_processing` | Re-read and merge; use a fresh Idempotency-Key for a different request. Archived files can't be changed; files still processing can be changed later. |
 | 429 | `rate_limit_error` | `rate_limited` | Wait `retry-after` seconds, then retry once. |
 | 5xx | `api_error` | `upstream_unavailable`, `api_not_configured` | Try again later; report the `request_id` if it persists. |
 
-Batch endpoints answer `200` with per-item errors (for example `nosubmissions` from the status batch); check `results[].ok`.
+Batch endpoints answer `200` with per-item errors (for example `metadata_conflict` in a metadata batch); check `results[].ok`.
 
 ### Rate limits
 
-Per key: 120 requests per minute, 30 mutations (POST and PATCH) per minute, and 2 concurrent event streams. Every response carries `x-ratelimit-limit-requests`, `x-ratelimit-remaining-requests` and `x-ratelimit-reset-requests` (seconds). A batch of up to 100 items is one request, so batch changes instead of patching files one by one. On `429`, wait `retry-after` seconds and retry once; the MCP server does this by itself for waits of up to 20 seconds.
+Per key: 120 requests per minute and 30 mutations (POST and PATCH) per minute. Every response carries `x-ratelimit-limit-requests`, `x-ratelimit-remaining-requests` and `x-ratelimit-reset-requests` (seconds). A batch of up to 100 items is one request, so batch changes instead of patching files one by one. On `429`, wait `retry-after` seconds and retry once; the MCP server does this by itself for waits of up to 20 seconds.
 
-## Not available in v1
+## What the Agent API does not do
 
-- Deleting anything: files, folders, releases, templates, agencies, the account. Deleting is manual in the web interface.
+**Not available yet** (part of the contract; don't offer or promise them):
+
+- Changing statuses, including sending files to agencies for upload and submit.
+- Microstock+ AI keywording: price quotes, paid runs and job progress.
+- The Server-Sent Events stream, and events about status changes, uploads, submissions, reviews and AI jobs.
+- The account balance (`balance_eur` is `null`).
+
+**Not in v1:**
+
 - Uploading new files, creating or moving folders, archiving.
-- Listing category ids, releases or AI keywording templates.
-- Setting statuses other than `ready`, `queued` and `ignored`, and a dry run for status changes.
-- Paid CSV formats.
+- Listing releases or AI keywording templates.
+- Paid CSV layouts.
 - Working with other users' accounts or with folders shared by other people.
 - Creating, rotating or revoking agent keys through the API (only on https://microstock.plus/ai-agent-skills).
 - Changing account settings, plans or the balance.
 - Webhooks; use the event feed instead.
+
+**Never:** deleting anything: files, folders, releases, templates, agencies, the account. Deleting is manual in the web interface.

@@ -34,6 +34,11 @@ const EXPECTED_TOOLS = [
     "mplus_update_metadata_batch", "mplus_wait_for_events"
 ];
 const WRITE_TOOLS = ["mplus_update_metadata", "mplus_update_metadata_batch", "mplus_set_status"];
+// Tools of features the shipping Agent API keeps switched off: offered only with MPLUS_ENABLE_PREVIEW_TOOLS=1.
+const PREVIEW_TOOLS = ["mplus_get_job", "mplus_quote_ai_keywording", "mplus_run_ai_keywording", "mplus_set_status"];
+const AVAILABLE_TOOLS = EXPECTED_TOOLS.filter(name => !PREVIEW_TOOLS.includes(name));
+const PREVIEW = { MPLUS_ENABLE_PREVIEW_TOOLS: "1" };
+const DISABLED_FEATURES = ["status_changes", "ai_keywording", "event_stream"];
 
 let checks = 0;
 const clients = [];
@@ -55,7 +60,7 @@ async function check(name, fn) {
 // The developer's own environment must not leak a real key or another API base into the test.
 function cleanEnv(extra) {
     const env = { ...process.env };
-    for (const name of ["MPLUS_API_KEY", "MPLUS_API_BASE", "CLAUDE_PLUGIN_OPTION_API_KEY", "MPLUS_MCP_DEBUG"]) delete env[name];
+    for (const name of ["MPLUS_API_KEY", "MPLUS_API_BASE", "CLAUDE_PLUGIN_OPTION_API_KEY", "MPLUS_MCP_DEBUG", "MPLUS_ENABLE_PREVIEW_TOOLS"]) delete env[name];
     return { ...env, MPLUS_MCP_STRICT_OUTPUT: "1", ...extra };
 }
 
@@ -212,7 +217,7 @@ async function waitFor(condition, what, timeoutMs = 5000) {
 // ---------------------------------------------------------------------------
 
 async function legacySuite(mock, pluginVersion) {
-    const { client, init } = await legacyClient("full-key", { MPLUS_API_BASE: mock.baseUrl, MPLUS_API_KEY: mock.keys.full });
+    const { client, init } = await legacyClient("full-key", { MPLUS_API_BASE: mock.baseUrl, MPLUS_API_KEY: mock.keys.full, ...PREVIEW });
 
     await check("initialize (2025-11-25): version, identity, capabilities, instructions", async () => {
         assert.equal(init.protocolVersion, "2025-11-25");
@@ -225,7 +230,7 @@ async function legacySuite(mock, pluginVersion) {
         assert.match(init.instructions, /dry_run=true first/);
     });
 
-    await check("tools/list: the 12 contract tools with schemas and annotations, nothing that deletes", async () => {
+    await check("tools/list with MPLUS_ENABLE_PREVIEW_TOOLS=1: the 12 contract tools with schemas and annotations, nothing that deletes", async () => {
         const { result } = await client.request("tools/list", {});
         const tools = result.tools;
         assert.deepEqual(tools.map(tool => tool.name).sort(), EXPECTED_TOOLS);
@@ -553,7 +558,7 @@ async function legacySuite(mock, pluginVersion) {
 }
 
 async function modernSuite(mock) {
-    const client = new McpClient("modern", { MPLUS_API_BASE: mock.baseUrl, MPLUS_API_KEY: mock.keys.standard });
+    const client = new McpClient("modern", { MPLUS_API_BASE: mock.baseUrl, MPLUS_API_KEY: mock.keys.standard, ...PREVIEW });
     const meta = modernMeta();
 
     await check("2026-07-28: requests without _meta are rejected; server/discover works without initialize", async () => {
@@ -620,7 +625,7 @@ async function credentialSuite(mock) {
     await check("revoked key: tools stay listed, calls explain how to get a new key", async () => {
         const { client } = await legacyClient("revoked", { MPLUS_API_BASE: mock.baseUrl, MPLUS_API_KEY: mock.keys.revoked });
         const { result } = await client.request("tools/list", {});
-        assert.equal(result.tools.length, 12);
+        assert.equal(result.tools.length, AVAILABLE_TOOLS.length);
         expectToolError(await callTool(client, "mplus_get_account"), /401, revoked_api_key.*Create an agent key/, "revoked key");
         await client.close();
     });
@@ -642,7 +647,7 @@ async function credentialSuite(mock) {
     await check("no key: every tool is listed and explains where to create a key", async () => {
         const { client } = await legacyClient("no-key", { MPLUS_API_BASE: mock.baseUrl, MPLUS_API_KEY: "${user_config.api_key}" });
         const { result } = await client.request("tools/list", {});
-        assert.equal(result.tools.length, 12);
+        assert.equal(result.tools.length, AVAILABLE_TOOLS.length);
         expectToolError(await callTool(client, "mplus_list_files"), /No Microstock\+ agent key is configured.*ai-agent-skills.*Agent keys/, "no key");
         await client.close();
     });
@@ -658,7 +663,7 @@ async function credentialSuite(mock) {
     await check("insufficient scope reported by the API: 403 scope_required is mapped to a tool error", async () => {
         const { client } = await legacyClient("read-only", { MPLUS_API_BASE: mock.baseUrl, MPLUS_API_KEY: mock.keys.readonly });
         const { result } = await client.request("tools/list", {});
-        assert.equal(result.tools.length, 12, "without account:read the scopes are unknown, so every tool is listed");
+        assert.equal(result.tools.length, AVAILABLE_TOOLS.length, "without account:read the scopes are unknown, so every offered tool is listed");
         expectToolError(await callTool(client, "mplus_update_metadata", { iid: IID.icons, notes: "x" }),
             /403, scope_required.*metadata:write.*permission/, "scope_required");
         expectOk(await callTool(client, "mplus_get_file", { iid: IID.icons }), "read with a read-only key");
@@ -666,7 +671,7 @@ async function credentialSuite(mock) {
     });
 
     await check("paid run with unknown scopes: the API's 403 scope_required for ai:run reaches the model", async () => {
-        const { client } = await legacyClient("quote-only", { MPLUS_API_BASE: mock.baseUrl, MPLUS_API_KEY: mock.keys.quoteOnly });
+        const { client } = await legacyClient("quote-only", { MPLUS_API_BASE: mock.baseUrl, MPLUS_API_KEY: mock.keys.quoteOnly, ...PREVIEW });
         const { result } = await client.request("tools/list", {});
         assert.ok(result.tools.some(tool => tool.name === "mplus_run_ai_keywording"), "unknown scopes list every tool");
         const quote = expectOk(await callTool(client, "mplus_quote_ai_keywording", { iids: [IID.drone], mode: "replace" }), "quote");
@@ -678,7 +683,7 @@ async function credentialSuite(mock) {
     });
 
     await check("scope change: notifications/tools/list_changed, then the paid tool appears", async () => {
-        const { client } = await legacyClient("scope-change", { MPLUS_API_BASE: mock.baseUrl, MPLUS_API_KEY: mock.keys.standard });
+        const { client } = await legacyClient("scope-change", { MPLUS_API_BASE: mock.baseUrl, MPLUS_API_KEY: mock.keys.standard, ...PREVIEW });
         const before = (await client.request("tools/list", {})).result.tools.map(tool => tool.name);
         assert.ok(!before.includes("mplus_run_ai_keywording"));
         mock.control.setScopes("standard", ALL_SCOPES);
@@ -732,7 +737,7 @@ async function httpSuite(mock) {
             body: { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }
         });
         assert.equal(list.status, 200);
-        assert.equal(list.body.result.tools.length, 12);
+        assert.deepEqual(list.body.result.tools.map(tool => tool.name).sort(), AVAILABLE_TOOLS);
         const note = await rawHttp(port, { headers: auth, body: { jsonrpc: "2.0", method: "notifications/initialized" } });
         assert.equal(note.status, 202);
     });
@@ -769,6 +774,92 @@ async function httpSuite(mock) {
 
     server.child.kill();
     await server.exited;
+}
+
+async function availabilitySuite(mock) {
+    const callArgs = {
+        mplus_set_status: { iids: [IID.icons], agencies: ["adobestock"], status: "ready" },
+        mplus_quote_ai_keywording: { iids: [IID.drone], mode: "skip" },
+        mplus_run_ai_keywording: { quote_id: "q_any", confirm_charge_eur: 1 },
+        mplus_get_job: { job_id: "job_any" }
+    };
+    const refusals = {};
+
+    await check("default: status changes and AI keywording tools are not offered, even to a key with every scope", async () => {
+        const { client, init } = await legacyClient("default-full", { MPLUS_API_BASE: mock.baseUrl, MPLUS_API_KEY: mock.keys.full });
+        const { result } = await client.request("tools/list", {});
+        assert.deepEqual(result.tools.map(tool => tool.name).sort(), AVAILABLE_TOOLS);
+        assert.match(init.instructions, /not available through these tools yet: don't offer or promise them/);
+        for (const name of PREVIEW_TOOLS) assert.ok(!init.instructions.includes(name), `instructions mention ${name}`);
+        const events = result.tools.find(tool => tool.name === "mplus_wait_for_events");
+        assert.match(events.description, /upload, submission and review events are not reported yet/);
+        assert.doesNotMatch(events.description, /AI quotes and jobs/);
+        await client.close();
+    });
+
+    await check("default: calling a hidden tool answers 'not available yet' and never contacts the API", async () => {
+        const { client } = await legacyClient("default-calls", { MPLUS_API_BASE: mock.baseUrl, MPLUS_API_KEY: mock.keys.full });
+        for (const name of PREVIEW_TOOLS) {
+            const before = mock.requests.length;
+            const result = await callTool(client, name, callArgs[name]);
+            expectToolError(result, /^Not available yet \(not_available_yet\): /, name);
+            assert.match(textOf(result), name === "mplus_set_status" ? /sending files to stock agencies/ : /AI keywording/, name);
+            assert.match(textOf(result), /Don't offer or promise it/, name);
+            assert.equal(mock.requests.length, before, `${name} must not contact the API`);
+            refusals[name] = textOf(result);
+        }
+        await client.close();
+    });
+
+    await check("default: the account summary says what is not available yet; a null balance is fine", async () => {
+        mock.control.setBalance(null);
+        try {
+            const { client } = await legacyClient("default-account", { MPLUS_API_BASE: mock.baseUrl, MPLUS_API_KEY: mock.keys.standard });
+            const account = expectOk(await callTool(client, "mplus_get_account"), "mplus_get_account");
+            assert.equal(account.balance_eur, null);
+            assert.doesNotMatch(account.summary, /balance/);
+            assert.match(account.summary, /Not available through the Agent API yet: status changes and sending files to agencies, and AI keywording/);
+            assert.doesNotMatch(account.summary, /set statuses and queue uploads|quote AI keywording/);
+            await client.close();
+        } finally {
+            mock.control.setBalance(25);
+        }
+    });
+
+    const mvp = await startMockApi({ disabledFeatures: DISABLED_FEATURES });
+    try {
+        await check("preview tools against an API that keeps them off: 403 endpoint_disabled gives the same answer", async () => {
+            const { client } = await legacyClient("preview-mvp", { MPLUS_API_BASE: mvp.baseUrl, MPLUS_API_KEY: mvp.keys.full, ...PREVIEW });
+            const { result } = await client.request("tools/list", {});
+            assert.deepEqual(result.tools.map(tool => tool.name).sort(), EXPECTED_TOOLS);
+            for (const name of ["mplus_set_status", "mplus_quote_ai_keywording", "mplus_get_job"]) {
+                const before = mvp.requests.length;
+                const answer = await callTool(client, name, callArgs[name]);
+                expectToolError(answer, /^Not available yet \(not_available_yet\): /, name);
+                assert.equal(textOf(answer), refusals[name], `${name}: endpoint_disabled must read like the local refusal`);
+                assert.equal(mvp.requests.length, before + 1, `${name} asks the API once`);
+                assert.equal(mvp.requests.at(-1).status, 403);
+            }
+            assert.match(client.stderr, /mplus_set_status: 403 endpoint_disabled/);
+            expectOk(await callTool(client, "mplus_update_metadata_batch", {
+                items: [{ iid: IID.icons, patch: { notes: "checked" } }], dry_run: true
+            }), "metadata still works");
+            await client.close();
+        });
+    } finally {
+        await mvp.close();
+    }
+
+    const off = await startMockApi({ apiOff: true });
+    try {
+        await check("switched-off Agent API: 404 not_found says the API is not on for this account yet", async () => {
+            const { client } = await legacyClient("api-off", { MPLUS_API_BASE: off.baseUrl, MPLUS_API_KEY: off.keys.full });
+            expectToolError(await callTool(client, "mplus_list_folders"), /404, not_found.*not switched on for this account yet.*ai-agent-skills/, "api off");
+            await client.close();
+        });
+    } finally {
+        await off.close();
+    }
 }
 
 async function packagingSuite(pluginManifest) {
@@ -826,6 +917,7 @@ async function main() {
         await credentialSuite(mock);
         await olderProtocolSuite(mock);
         await httpSuite(mock);
+        await availabilitySuite(mock);
         await packagingSuite(pluginManifest);
         console.log(`All ${checks} smoke checks passed (Node ${process.versions.node}).`);
     } finally {

@@ -10,6 +10,11 @@
 //
 // Besides the contract it implements GET /exports/{id}/download (the download_url of an
 // export). GET /events/stream (Server-Sent Events) answers 501: the MCP server long-polls.
+//
+// Like the Agent API release that ships first, startMockApi({ disabledFeatures: [...] }) answers
+// 403 endpoint_disabled for "status_changes" (status batch), "ai_keywording" (quote, run, jobs) and
+// "event_stream", after authentication and before the scope check; startMockApi({ apiOff: true })
+// answers every path with 404 not_found, as the API does while it is switched off for an account.
 
 import { createServer } from "node:http";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -25,6 +30,12 @@ const READ_STATUSES = [
     "approved", "rejected", "approvalfailed", "notready", "scheduled", "cannotbequeued", "nosubmissions"
 ];
 const SETTABLE_STATUSES = ["ready", "queued", "ignored"];
+// The reasons the shipping Agent API sends with 403 endpoint_disabled.
+const DISABLED_REASONS = {
+    status_changes: "Changing statuses through the Agent API is not available yet; change them in My Files.",
+    ai_keywording: "AI keywording is not available through the Agent API yet; start it in My Files.",
+    event_stream: "The event stream is not available yet; poll GET /events with wait instead."
+};
 // Which current statuses each settable status may replace (simplified web-interface rules).
 const STATUS_TRANSITIONS = {
     queued: ["ready", "queued", "uploadfailed", "submitfailed"],
@@ -461,7 +472,8 @@ function buildCsv(files, format, delimiter) {
 
 export { ALL_SCOPES, DEFAULT_SCOPES };
 
-export async function startMockApi({ port = 0, host = "127.0.0.1", rateLimits = {} } = {}) {
+export async function startMockApi({ port = 0, host = "127.0.0.1", rateLimits = {}, disabledFeatures = [], apiOff = false } = {}) {
+    const disabled = new Set(disabledFeatures);
     const limits = { requests: rateLimits.requests ?? 120, mutations: rateLimits.mutations ?? 30 };
     const keys = {};
     const keyRecords = new Map();
@@ -995,16 +1007,16 @@ export async function startMockApi({ port = 0, host = "127.0.0.1", rateLimits = 
         ["GET", /^\/folders$/, "files:read", listFolders],
         ["GET", /^\/files$/, "files:read", listFiles],
         ["POST", /^\/files\/metadata:batch$/, "metadata:write", metadataBatch],
-        ["POST", /^\/files\/status:batch$/, "status:write", statusBatch],
+        ["POST", /^\/files\/status:batch$/, "status:write", statusBatch, "status_changes"],
         ["GET", /^\/files\/([^/]+)$/, "files:read", getFileRoute],
         ["PATCH", /^\/files\/([^/]+)\/metadata$/, "metadata:write", patchMetadata],
         ["POST", /^\/exports\/csv$/, "csv:export", createExport],
         ["GET", /^\/exports\/([^/]+)\/download$/, "csv:export", downloadExport],
-        ["POST", /^\/ai\/keywording:quote$/, "ai:quote", quote],
-        ["POST", /^\/ai\/keywording:run$/, "ai:run", run],
-        ["GET", /^\/jobs\/([^/]+)$/, "files:read", getJob],
+        ["POST", /^\/ai\/keywording:quote$/, "ai:quote", quote, "ai_keywording"],
+        ["POST", /^\/ai\/keywording:run$/, "ai:run", run, "ai_keywording"],
+        ["GET", /^\/jobs\/([^/]+)$/, "files:read", getJob, "ai_keywording"],
         ["GET", /^\/events$/, "events:read", listEvents],
-        ["GET", /^\/events\/stream$/, "events:read", streamEvents]
+        ["GET", /^\/events\/stream$/, "events:read", streamEvents, "event_stream"]
     ];
 
     function getFileRoute(ctx, iid) {
@@ -1087,12 +1099,13 @@ export async function startMockApi({ port = 0, host = "127.0.0.1", rateLimits = 
         let headers = { "x-request-id": requestId };
         try {
             if (!url.pathname.startsWith(`${BASE_PATH}/`)) throw fail.notFound("not_found", "Not an Agent API path.");
+            if (apiOff) throw fail.notFound("not_found", "No such endpoint.");
             if (req.method === "DELETE") {
                 throw new ApiFailure(405, "permission_error", "deletion_not_supported",
                     "Deleting is not available through the Agent API. Delete files in the Microstock+ web interface.");
             }
             const route = url.pathname.slice(BASE_PATH.length);
-            const match = routes.map(([method, pattern, scope, handler]) => ({ method, scope, handler, params: pattern.exec(route) }))
+            const match = routes.map(([method, pattern, scope, handler, feature]) => ({ method, scope, handler, feature, params: pattern.exec(route) }))
                 .filter(item => item.params);
             if (match.length === 0) throw fail.notFound("not_found", `No endpoint ${route}.`);
             const target = match.find(item => item.method === req.method);
@@ -1101,6 +1114,9 @@ export async function startMockApi({ port = 0, host = "127.0.0.1", rateLimits = 
             record.keyPrefix = key.prefix;
             const mutation = req.method === "POST" || req.method === "PATCH";
             headers = { ...headers, ...rateLimit(key, mutation) };
+            if (target.feature && disabled.has(target.feature)) {
+                throw fail.permission("endpoint_disabled", DISABLED_REASONS[target.feature]);
+            }
             if (!key.scopes.includes(target.scope)) {
                 throw fail.permission("scope_required", `This key lacks the ${target.scope} scope.`, target.scope);
             }
@@ -1178,6 +1194,10 @@ export async function startMockApi({ port = 0, host = "127.0.0.1", rateLimits = 
         file: iid => clone(state.files.get(iid)),
         jobCount: () => state.jobs.size,
         balance: () => state.account.balance_eur,
+        // The shipping Agent API reports balance_eur as null.
+        setBalance(value) {
+            state.account.balance_eur = value;
+        },
         eventCount: () => state.events.length
     };
 

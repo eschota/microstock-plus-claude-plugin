@@ -16,28 +16,27 @@ Microstock+ (M+) — рабочее место стокера. В нём леж�
 
 С ключом агента вы работаете **от имени пользователя и с меньшими правами, чем у него**. Можно:
 
-- читать папки, файлы, атрибуцию, статусы по стокам и результаты проверки (валидацию);
+- читать папки, файлы, атрибуцию, статусы по стокам, причины отказов и результаты проверки (валидацию);
 - править атрибуцию: по одному файлу или батчем с пробным прогоном (dry run);
-- ставить статусы по стокам, в том числе ставить файлы в очередь на загрузку и сабмит;
 - выгружать атрибуцию в CSV;
-- узнавать цену ИИ-атрибуции и, когда пользователь подтвердил сумму, запускать её (платно);
-- следить за лентой событий: загрузки, проверка, задачи.
+- следить за лентой событий: изменения, сделанные через Agent API.
+
+**Пока недоступно.** Смена статусов (в том числе отправка файлов на стоки — загрузка и сабмит), ИИ-атрибуция Microstock+ (расчёт цены, платный запуск и прогресс задач) и поток Server-Sent Events есть в контракте, но в текущем релизе выключены: API отвечает `403 endpoint_disabled`, ключам нельзя выдать скоупы `status:write`, `ai:quote` и `ai:run`, а MCP-сервер не предлагает эти инструменты. Не предлагайте и не обещайте эти возможности и никогда не говорите, что что-то поставили в очередь, засабмитили или оплатили. Если пользователь просит, скажите, что это появится позже, а пока он делает это сам в веб-интерфейсе Microstock+ («Мои файлы»). Вместо ИИ-атрибуции можете сами написать названия, описания и ключи (сценарии B и C).
 
 ## Правила, которые нужно соблюдать
 
 1. **Только аккаунт владельца ключа.** Каждый вызов работает с аккаунтом, которому принадлежит ключ. Доступа к другим пользователям и к чужим расшаренным папкам нет.
 2. **Удалить ничего нельзя.** Ни один эндпоинт, инструмент, скоуп или флаг не удаляет файлы, папки, релизы, шаблоны, стоки или аккаунт; любой запрос `DELETE` получает `405 deletion_not_supported`. Если пользователь просит что-то удалить, скажите, что удаление делается вручную в веб-интерфейсе Microstock+ (Мои файлы), и никогда не утверждайте, что что-то удалили.
-3. **Деньги — только с согласия человека.** ИИ-атрибуция платная. Сначала получите расчёт цены (quote), назовите пользователю точную сумму и запускайте только после того, как он явно согласился именно с этой суммой. Для запуска нужен скоуп `ai:run`, по умолчанию он выключен.
-4. **Спросите, прежде чем отправлять файлы на стоки.** Статус `queued` загружает и сабмитит файлы пользователя на внешние стоки. Покажите, какие файлы на какие стоки уйдут, и получите явное «да».
-5. **Сначала пробный прогон.** Любой батч правок атрибуции сначала запускайте с `dry_run: true`, покажите изменения, потом применяйте.
-6. **Не затирайте более свежие правки.** В каждую правку передавайте `if_match_metaver`. При `409 metadata_conflict` перечитайте файл и объедините изменения.
-7. **Не выдумывайте id.** API не умеет выдавать списки категорий, релизов и шаблонов ИИ-атрибуции. Берите id, которые уже стоят на файлах пользователя, или оставьте эти поля пользователю.
-8. **Храните ключ в секрете.** Никогда не печатайте его, не пишите в логи, файлы и репозитории и не отправляйте никуда, кроме `https://microstock.plus`.
-9. **Всё, что вы делаете, видно.** Пользователь видит действия агента в реальном времени (очередь всплывающих уведомлений в «Моих файлах» и лента событий), может откатить правки атрибуции через историю метаданных, а каждый вызов пишется в журнал аудита с префиксом ключа.
+3. **Никаких трат и отправок.** Ничто из того, что агент может сделать сегодня, не стоит денег и никуда не отправляет файлы: ИИ-атрибуция и смена статусов пока недоступны (см. выше). Когда они появятся, для ИИ-атрибуции понадобится явное согласие пользователя с рассчитанной ценой, а для отправки файлов на стоки — явное «да» на конкретные файлы и стоки.
+4. **Сначала пробный прогон.** Любой батч правок атрибуции сначала запускайте с `dry_run: true`, покажите изменения, потом применяйте.
+5. **Не затирайте более свежие правки.** В каждую правку передавайте `if_match_metaver`. При `409 metadata_conflict` перечитайте файл и объедините изменения.
+6. **Не выдумывайте id.** Категории берите из таблицы в справочнике ниже. Списков релизов и шаблонов ИИ-атрибуции API не выдаёт: берите id, которые уже стоят на файлах пользователя, или оставьте эти поля пользователю.
+7. **Храните ключ в секрете.** Никогда не печатайте его, не пишите в логи, файлы и репозитории и не отправляйте никуда, кроме `https://microstock.plus`.
+8. **Всё, что вы делаете, видно.** Изменения сразу сохраняются в файлах пользователя и видны в «Моих файлах»; правки атрибуции можно откатить через историю метаданных, а каждый вызов пишется в журнал аудита с префиксом ключа.
 
 ## Авторизация
 
-1. Пользователь входит на https://microstock.plus/ai-agent-skills и создаёт ключ в разделе **«Ключи агентов»** (Agent keys): имя (например, «Claude Code») и скоупы. Полный ключ показывается **один раз**. Активных ключей может быть до 10; у каждого видны префикс, скоупы, время создания и последнего использования и число запросов. Ключ можно перевыпустить (новый секрет, те же имя и скоупы) или отозвать (срабатывает в течение 30 секунд).
+1. Пользователь входит на https://microstock.plus/ai-agent-skills и создаёт ключ в разделе **«Ключи агентов»** (Agent keys): имя (например, «Claude Code») и скоупы. Полный ключ показывается **один раз**. Активных ключей может быть до 10; у каждого видны префикс, скоупы, время создания и последнего использования и число запросов. Ключ можно перевыпустить (новый секрет, те же имя и скоупы) или отозвать (срабатывает в течение 30 секунд). Ключи агентов открываются постепенно: пока Agent API не включён для аккаунта, любой вызов получает `404 not_found`.
 2. Передавайте ключ в каждом запросе:
 
    ```http
@@ -51,21 +50,23 @@ Microstock+ (M+) — рабочее место стокера. В нём леж�
 | Скоуп | Что разрешает | По умолчанию |
 | - | - | - |
 | `account:read` | `GET /me` | включён |
-| `files:read` | папки, файлы, подробности файла и валидация, прогресс ИИ-задач | включён |
+| `files:read` | папки, файлы, подробности файла и валидация | включён |
 | `metadata:write` | правка атрибуции: одного файла и батчем | включён |
-| `status:write` | пакетная смена статусов (`ready`, `queued`, `ignored`) | включён |
 | `csv:export` | бесплатные выгрузки CSV | включён |
-| `events:read` | лента и поток событий | включён |
-| `ai:quote` | расчёт цены ИИ-атрибуции | включён |
-| `ai:run` | запуск ИИ-атрибуции (списывает деньги с баланса) | **выключен** |
+| `events:read` | лента событий (long poll) | включён |
+| `status:write` | пакетная смена статусов (`ready`, `queued`, `ignored`) | пока недоступен |
+| `ai:quote` | расчёт цены ИИ-атрибуции | пока недоступен |
+| `ai:run` | запуск ИИ-атрибуции (списывает деньги с баланса) | пока недоступен |
 
-Скоупа на удаление нет, и добавить его нельзя. Скоупы текущего ключа показывает `GET /me` (`mplus_get_account`).
+Сейчас ключу можно выдать только первые пять скоупов; последние три появятся, когда включат их эндпоинты (`ai:run` тогда будет выключен по умолчанию). Скоупа на удаление нет, и добавить его нельзя. Скоупы текущего ключа показывает `GET /me` (`mplus_get_account`); `balance_eur` в этом релизе всегда `null`.
 
 ## Подключение
 
 ### MCP-сервер (рекомендуется)
 
 `mplus-mcp.mjs` — MCP-сервер в одном файле, без зависимостей. Нужен Node.js 18 или новее и ключ в переменной окружения `MPLUS_API_KEY`; сервер обращается только к `https://microstock.plus` по HTTPS. Скачайте его по ссылке https://microstock.plus/ai-agent-skills/mplus-mcp.mjs?download=1 и в примерах ниже укажите абсолютный путь.
+
+Инструменты смены статусов и ИИ-атрибуции (`mplus_set_status`, `mplus_quote_ai_keywording`, `mplus_run_ai_keywording`, `mplus_get_job`) скрыты и отвечают «пока недоступно», если сервер не запущен с `MPLUS_ENABLE_PREVIEW_TOOLS=1`; с текущим API эту настройку не включайте.
 
 **Claude Code с плагином.** Плагин `microstock-plus` включает сервер, два навыка и три команды и хранит ключ в защищённом хранилище системы. После того как добавлен маркетплейс с плагином:
 
@@ -147,15 +148,15 @@ curl -s https://microstock.plus/api/agent/v1/me -H "Authorization: Bearer $MPLUS
 | `mplus_get_file` | `GET /files/{iid}` | `files:read` | Один файл: вся атрибуция, metaver, статусы, валидация |
 | `mplus_update_metadata` | `PATCH /files/{iid}/metadata` | `metadata:write` | Правка атрибуции одного файла (merge patch) |
 | `mplus_update_metadata_batch` | `POST /files/metadata:batch` | `metadata:write` | Батч до 100 правок, результат по каждой, `dry_run` |
-| `mplus_set_status` | `POST /files/status:batch` | `status:write` | Статусы `ready`, `queued` или `ignored` по стокам |
+| `mplus_set_status` | `POST /files/status:batch` | `status:write` | **Пока недоступно** (`403 endpoint_disabled`): статусы `ready`, `queued` или `ignored` по стокам |
 | `mplus_export_csv` | `POST /exports/csv` | `csv:export` | Выгрузка CSV (бесплатные форматы) |
-| `mplus_quote_ai_keywording` | `POST /ai/keywording:quote` | `ai:quote` | Расчёт цены, бесплатно |
-| `mplus_run_ai_keywording` | `POST /ai/keywording:run` | `ai:run` | Запуск по расчёту, **платно** |
-| `mplus_get_job` | `GET /jobs/{id}` | `files:read` | Прогресс ИИ-задачи |
+| `mplus_quote_ai_keywording` | `POST /ai/keywording:quote` | `ai:quote` | **Пока недоступно**: расчёт цены ИИ-атрибуции |
+| `mplus_run_ai_keywording` | `POST /ai/keywording:run` | `ai:run` | **Пока недоступно**: запуск по расчёту, платно |
+| `mplus_get_job` | `GET /jobs/{id}` | `files:read` | **Пока недоступно**: прогресс ИИ-задачи |
 | `mplus_wait_for_events` | `GET /events` | `events:read` | Long poll ленты событий (до 25 с) |
-| — | `GET /events/stream` | `events:read` | Server-Sent Events, продолжение по `Last-Event-ID` |
+| — | `GET /events/stream` | `events:read` | **Пока недоступно**: Server-Sent Events |
 
-Начинайте сессию с `mplus_get_account` (`GET /me`): он покажет подключённые стоки, их id и что разрешено ключу. Если ключ может читать аккаунт, MCP-сервер показывает только инструменты, разрешённые его скоупами, поэтому `mplus_run_ai_keywording` виден только ключам с `ai:run`.
+Начинайте сессию с `mplus_get_account` (`GET /me`): он покажет подключённые стоки, их id и что разрешено ключу. Если ключ может читать аккаунт, MCP-сервер показывает только инструменты, разрешённые его скоупами; четыре инструмента с пометкой «пока недоступно» в этом релизе не предлагаются вовсе.
 
 ## Сценарии
 
@@ -196,7 +197,7 @@ curl -s "https://microstock.plus/api/agent/v1/files?folder=/foto/2026&recursive=
 | Adobe Stock (`adobestock`) | 5-49 | название до 200 символов | Порядок важен: Adobe сильнее учитывает первые ключи, поставьте 10 главных в начало. |
 | Shutterstock (`shutterstock`) | 7-50 | описание до 200 символов, не меньше 5 слов | Лучше отдельные слова, а не фразы. |
 | iStock (`esp`) | 5-49 | название до 255 символов | При сабмите iStock сопоставляет ключи с контролируемым словарём Getty; то, что не сопоставилось, отбрасывается или требует уточнения в iStock. Используйте обычные английские существительные и прилагательные. |
-| Pond5 (`pond5`) | 1-50, всего не больше 79 слов | название 3-80 символов, описание до 500 | При постановке в очередь Pond5 проверяются релизы (Pond5 release guard). |
+| Pond5 (`pond5`) | 1-50, всего не больше 79 слов | название 3-80 символов, описание до 500 | Перед отправкой на Pond5 Microstock+ проверяет релизы (Pond5 release guard). |
 | Dreamstime (`dreamstime`) | 10-80 | название до 130 символов | |
 | Alamy (`alamy`) | не меньше 3 | название до 150 символов | |
 | Depositphotos (`depositphotos`) | не меньше 8 | название и описание 6-250 символов | |
@@ -207,11 +208,11 @@ curl -s "https://microstock.plus/api/agent/v1/files?folder=/foto/2026&recursive=
 
 - Ставьте `ai_generated: true` для всего, что сделано генеративным ИИ. Microstock+ тогда ставит `editorial: false` (ИИ-контент не бывает эдиториалом; запрос с обоими флагами отклоняется) и передаёт флаг стокам, у которых он есть, например флаг генеративного ИИ на Adobe Stock.
 - Описывайте то, что изображено. Не выдавайте ИИ-изображения за фото реальных событий, мест или людей и не добавляйте в ключи названия инструментов вроде Midjourney или Stable Diffusion.
-- Правила стоков насчёт ИИ разные и меняются, а некоторые стоки генеративный ИИ не принимают вообще. Смотрите валидацию и спрашивайте пользователя, прежде чем ставить ИИ-контент в очередь.
+- Правила стоков насчёт ИИ разные и меняются, а некоторые стоки генеративный ИИ не принимают вообще. Смотрите валидацию по каждому стоку и предупреждайте пользователя о стоках, которые такой контент не принимают.
 
 **Товарные знаки и люди.** В коммерческом (не эдиториал) контенте не упоминайте в названиях, описаниях и ключах бренды, логотипы, названия продуктов, персонажей, произведения искусства и имена реальных людей. В эдиториале их можно называть по факту.
 
-**Категории и релизы.** Категории — это id вида `{"cat": 12, "sub": 3}`, релизы — id вида `rel_123`. API не выдаёт их списков, поэтому копируйте id с файлов, где они уже стоят правильно, или оставьте это пользователю.
+**Категории и релизы.** У файла не больше 3 категорий, каждая — `{"cat": 16, "sub": 7}` (Nature, Plants and trees) из таблицы в справочнике ниже; если подкатегория не подходит, не передавайте `sub`. Релизы — id вида `rel_123`, их списка API не выдаёт: копируйте id с файлов, где они уже стоят правильно, или оставьте это пользователю.
 
 ### C. Пробный прогон и применение батча, конфликты metaver
 
@@ -232,27 +233,9 @@ curl -s -X POST https://microstock.plus/api/agent/v1/files/metadata:batch \
                  "keywords": {"add": ["golden", "fall", "trees", "aerial"]}}}]}'
 ```
 
-### D. Статусы и постановка в очередь на загрузку
+### D. Статусы и загрузка (пока недоступно)
 
-Статус свой у каждого файла на каждом стоке. Агент может ставить три:
-
-| Статус | Значение |
-| - | - |
-| `ready` | Готов, не отправлен. Так файл убирают из очереди или из `ignored`. |
-| `queued` | Отправить на сток: Microstock+ загрузит и засабмитит файл. |
-| `ignored` | Никогда не отправлять этот файл на этот сток. |
-
-1. Сначала проверьте файлы: валидацию по каждому целевому стоку и то, что стоки подключены (`mplus_get_account`).
-2. Покажите пользователю, какие файлы на какие стоки уйдут, и получите явное «да».
-3. `mplus_set_status` со `status: "queued"` и `user_confirmed: true` (`POST /files/status:batch`, до 100 файлов). Без `user_confirmed: true` MCP-инструмент `queued` не ставит.
-4. Разберите результаты: по одному на каждую пару «файл — сток». Действуют те же правила, что в веб-интерфейсе, поэтому отдельные элементы могут не пройти, например `nosubmissions`, когда исчерпан лимит сабмитов, или проверка релизов Pond5. Сообщайте о сбоях, не повторяйте их вслепую.
-5. Следите за загрузкой по сценарию G.
-
-```bash
-curl -s -X POST https://microstock.plus/api/agent/v1/files/status:batch \
-  -H "Authorization: Bearer $MPLUS_API_KEY" -H "Content-Type: application/json" -H "Idempotency-Key: $(uuidgen)" \
-  -d '{"iids": ["6abc74e948864d403ea0c559"], "agencies": ["adobestock", "shutterstock"], "status": "queued"}'
-```
+Читать статусы можно: `mplus_list_files` с `agency` и `status` (например, все файлы со статусом `rejected` на Adobe Stock) и `mplus_get_file` для одного файла — с `rejection_reasons`, если сток назвал причину. Менять их пока нельзя: `POST /files/status:batch` отвечает `403 endpoint_disabled`, ключам нельзя выдать `status:write`, а MCP-сервер не предлагает `mplus_set_status`. Не предлагайте и не обещайте ставить `ready`, `queued` (отправить на сток: загрузка и сабмит) или `ignored`. Когда файлы готовы, скажите пользователю, какие файлы и на какие стоки вы советуете отправить, — отправит он сам из «Моих файлов».
 
 ### E. Выгрузка CSV
 
@@ -277,53 +260,36 @@ curl -s -X POST https://microstock.plus/api/agent/v1/exports/csv \
   -d '{"folder": "/foto/2026", "recursive": true, "format": "with_title", "delimiter": "comma"}' -o foto-2026.csv
 ```
 
-Платных форматов CSV в v1 нет.
+Платных форматов CSV из «Моих файлов», например для Shutterstock и Pond5, в API нет. В одной выгрузке не больше 500 файлов (иначе `export_too_large`): большие папки выгружайте по подпапкам.
 
-### F. ИИ-атрибуция: расчёт, подтверждение, запуск
+### F. ИИ-атрибуция Microstock+ (пока недоступно)
 
-1. Расчёт, бесплатно: `mplus_quote_ai_keywording` с iids и режимом `mode` (`POST /ai/keywording:quote`). `skip` не трогает файлы, у которых уже есть атрибуция, и не берёт за них деньги; `replace` переписывает атрибуцию всех перечисленных файлов. Ответ: `quote_id`, число платных файлов `files`, сумма `amount_eur` и срок действия `expires_at`.
-2. Назовите пользователю точную сумму, число файлов и режим и попросите явного подтверждения. Не запускайте по собственной инициативе и не считайте давнее общее «давай» согласием с этой суммой.
-3. Запуск, платно: `mplus_run_ai_keywording` с `quote_id` и `confirm_charge_eur`, равным сумме из расчёта (`POST /ai/keywording:run` с `Idempotency-Key`). MCP-инструмент отказывает, если сумма другая или если расчёт создан не им. Деньги списываются только за успешно обработанные файлы, по цене из расчёта. Повторный вызов с тем же расчётом возвращает ту же задачу и второй раз не списывает; по HTTP при повторе используйте тот же `Idempotency-Key`.
-4. Следите за задачей через `mplus_get_job` (`GET /jobs/{id}`) или события `ai.job.completed` и `ai.job.failed`, потом покажите пользователю новую атрибуцию и списанную сумму.
-
-Если у ключа нет `ai:run`, запуск вернёт `403 scope_required`: пользователь может создать ключ с этим скоупом или запустить ИИ-атрибуцию в веб-интерфейсе. Просроченный расчёт даст `409 quote_expired`: получите новый расчёт и подтвердите новую цену.
-
-```bash
-curl -s -X POST https://microstock.plus/api/agent/v1/ai/keywording:quote \
-  -H "Authorization: Bearer $MPLUS_API_KEY" -H "Content-Type: application/json" -H "Idempotency-Key: $(uuidgen)" \
-  -d '{"iids": ["6abc74e948864d403ea0c559", "6abc74e948864d403ea0c560"], "mode": "skip", "template_id": null}'
-# Только после того, как пользователь подтвердил amount_eur:
-curl -s -X POST https://microstock.plus/api/agent/v1/ai/keywording:run \
-  -H "Authorization: Bearer $MPLUS_API_KEY" -H "Content-Type: application/json" \
-  -H "Idempotency-Key: 4f8b1e1c-2a8e-4c7e-9a43-0c6f7d3b9e21" \
-  -d '{"quote_id": "q_..."}'
-```
+Платная ИИ-атрибуция Microstock+ (бесплатный расчёт цены, затем платный запуск и прогресс задачи) через Agent API пока недоступна: её эндпоинты отвечают `403 endpoint_disabled`, а ключам нельзя выдать `ai:quote` и `ai:run`. Не предлагайте и не обещайте её и никогда не говорите, что запустили или оплатили её. Вместо этого напишите названия, описания и ключи сами по сценариям B и C или подскажите пользователю, что ИИ-атрибуцию можно запустить в «Моих файлах». Когда она появится здесь, для запуска понадобится явное согласие пользователя с рассчитанной ценой.
 
 ### G. События и отчёт о прогрессе
 
-В ленте событий видно всё, что происходит в аккаунте, включая действия самого пользователя и Microstock+. У события есть `id`, `type`, `created_at`, `actor` (`agent` с префиксом и именем ключа, `user` или `system`) и `data`.
+Сейчас в ленте событий видны изменения, сделанные через Agent API (правки атрибуции и выгрузки агентов), и изменения ключей агентов. События о смене статусов, загрузках, сабмитах, проверке и ИИ-задачах есть в контракте, но пока не приходят. У события есть `id`, `type`, `created_at`, `actor` (`agent` с префиксом и именем ключа, `user` или `system`) и `data`.
 
-| Тип | `data` |
-| - | - |
-| `file.metadata.updated` | `iids`, `fields`, `count`, `folder` |
-| `file.status.changed` | `iids`, `agency`, `from`, `to`, `count` |
-| `file.uploaded`, `file.submitted` | `iids`, `agency`, `count` |
-| `file.reviewed` | `iids`, `agency`, `result` (`approved` или `rejected`), `reason` |
-| `ai.quote.created` | `quote_id`, `files`, `amount_eur` |
-| `ai.job.started`, `ai.job.completed`, `ai.job.failed` | `job_id`, `files_total`, `files_done`, `files_failed`, `amount_eur_charged` |
-| `export.ready` | `export_id`, `rows`, `format` |
-| `key.created`, `key.revoked` | `key_prefix`, `key_name` |
+| Тип | `data` | Приходит сейчас |
+| - | - | - |
+| `file.metadata.updated` | `iids`, `fields`, `count`, `folder` | да |
+| `export.ready` | `export_id`, `rows`, `format` | да |
+| `key.created`, `key.revoked` | `key_prefix`, `key_name` | да |
+| `file.status.changed` | `iids`, `agency`, `from`, `to`, `count` | пока нет |
+| `file.uploaded`, `file.submitted` | `iids`, `agency`, `count` | пока нет |
+| `file.reviewed` | `iids`, `agency`, `result` (`approved` или `rejected`), `reason` | пока нет |
+| `ai.quote.created` | `quote_id`, `files`, `amount_eur` | пока нет |
+| `ai.job.started`, `ai.job.completed`, `ai.job.failed` | `job_id`, `files_total`, `files_done`, `files_failed`, `amount_eur_charged` | пока нет |
 
-1. `mplus_wait_for_events` без курсора возвращает последние события; с `types` — только нужные (`GET /events?types=file.status.changed,file.reviewed,ai.job.completed`).
+1. `mplus_wait_for_events` без курсора возвращает последние события; с `types` — только нужные (`GET /events?types=file.metadata.updated,export.ready`).
 2. Дальше вызывайте его с `cursor`, равным предыдущему `next_cursor` (`GET /events?since=<next_cursor>&wait=25`). Каждый вызов ждёт до 25 секунд и возвращается сразу, как только что-то произошло; `has_more: true` значит «вызовите сразу ещё раз».
-3. Сообщайте о прогрессе простыми словами («засабмичено 12 из 40 файлов на Adobe Stock; 2 отклонены на Shutterstock: <причина>») и остановитесь, когда цель пользователя достигнута или он попросил остановиться.
+3. Сообщайте простыми словами («ключи обновлены у 38 файлов в /foto/2026; CSV на 120 строк готов») и остановитесь, когда цель пользователя достигнута или он попросил остановиться.
 
-События хранятся 7 дней. По HTTP можно также держать поток Server-Sent Events (`GET /events/stream`, не больше 2 на ключ) и продолжать его по `Last-Event-ID`. MCP-клиенты, которые запрашивают лог-сообщения, получают заметные события (проверка, сбои, завершённые задачи) ещё и как `notifications/message`.
+События хранятся 7 дней. Поток Server-Sent Events (`GET /events/stream`) пока недоступен (`403 endpoint_disabled`); вместо него опрашивайте `GET /events` с `wait`. MCP-клиенты, которые запрашивают лог-сообщения, получают заметные события ещё и как `notifications/message`.
 
 ```bash
-curl -s "https://microstock.plus/api/agent/v1/events?since=evt_01J9Z3&types=file.status.changed,file.reviewed&wait=25" \
+curl -s "https://microstock.plus/api/agent/v1/events?since=evt_01J9Z3&types=file.metadata.updated,export.ready&wait=25" \
   -H "Authorization: Bearer $MPLUS_API_KEY"
-curl -N https://microstock.plus/api/agent/v1/events/stream -H "Authorization: Bearer $MPLUS_API_KEY"
 ```
 
 ## Справочник
@@ -354,7 +320,7 @@ curl -N https://microstock.plus/api/agent/v1/events/stream -H "Authorization: Be
 }
 ```
 
-Ещё есть `size_bytes`, `created_at`, `archived`, `preview_url`, `thumbnail_url`; `type` — `raster`, `vector` или `video`. Полные схемы — в документе OpenAPI.
+Ещё есть `size_bytes`, `created_at`, `updated_at`, `archived`, `preview_url`, `thumbnail_url`; `type` — `raster`, `vector` или `video`. У стока могут быть также `reviewed_at`, `scheduled_at` и `rejection_reasons`. Полные схемы — в документе OpenAPI.
 
 ### Статусы
 
@@ -367,7 +333,7 @@ curl -N https://microstock.plus/api/agent/v1/events/stream -H "Authorization: Be
 | `uploaded` | Загружен на сток, ещё не засабмичен |
 | `uploadfailed`, `submitfailed` | Этот шаг не удался; смотрите `errors` |
 | `submitted` | Засабмичен, на проверке |
-| `approved`, `rejected` | Принят или отклонён; причина приходит в событии `file.reviewed` |
+| `approved`, `rejected` | Принят или отклонён; причину, если сток её назвал, показывает `rejection_reasons` у этого стока |
 | `approvalfailed` | Засабмичен, но на стоке его нет |
 | `notready` | Атрибуция не проходит валидацию этого стока |
 | `scheduled` | Загрузка на этот сток запланирована |
@@ -377,6 +343,40 @@ curl -N https://microstock.plus/api/agent/v1/events/stream -H "Authorization: Be
 ### Id стоков
 
 Берите id из `GET /me` (`mplus_get_account`); основные: `adobestock` (Adobe Stock), `shutterstock`, `esp` (iStock), `pond5`, `alamy`, `dreamstime`, `123rf` и `depositphotos`.
+
+### Id категорий
+
+Категории задаются как `{"cat": <id>, "sub": <id>}`, не больше 3 на файл; если подкатегория не подходит, не передавайте `sub`. Id постоянные: новые только добавляются. Названия — те же, что в дереве категорий Microstock+.
+
+| `cat` | Категория | Id `sub` |
+| - | - | - |
+| 1 | Abstract | 1 Miscellaneous, 2 Backgrounds, 3 Lights and Colors, 4 Shapes, 5 Blurs |
+| 2 | Animals/Wildlife | 1 Birds, 2 Pets, 3 Sea and Ocean life, 4 Insects, 5 Farm animals, 6 Miscellaneous |
+| 3 | Backgrounds/Textures | 1 Textures, 2 Backgrounds, 3 Miscellaneous |
+| 4 | Beauty/Fashion | 1 Clothing, 2 Parfume, 3 Miscellaneous |
+| 5 | Buildings/Landmarks | 1 Miscellaneous, 2 Historic buildings, 3 Indoor, 4 Outdoor, 5 Modern Building |
+| 6 | Business/Finance | 1 Miscellaneous, 2 Financial, 3 People, 4 Objects |
+| 7 | Celebrities | 1 Miscellaneous, 2 Holidays |
+| 8 | Education | 1 Miscellaneous, 2 Objects, 3 School, College, University etc |
+| 9 | Food and Drink | 1 Miscellaneous, 2 Food, 3 Drink |
+| 10 | Healthcare/Medical | 1 Miscellaneous, 2 Objects |
+| 11 | Holidays | 1 Miscellaneous, 2 Objects |
+| 12 | Illustrations/Clip-Art | 1 Miscellaneous, 2 2D, 3 3D, 4 Vector |
+| 13 | Industrial | 1 Miscellaneous, 2 Power and Energy, 3 Construction, 4 Manufacturing, 5 Military |
+| 14 | Interiors | 1 Miscellaneous, 2 Objects, 3 Furniture |
+| 15 | Miscellaneous | 1 Miscellaneous |
+| 16 | Nature | 1 Miscellaneous, 2 Sky, 3 Sea/Ocean/River, 4 Parks, 5 Flowers, 6 Underwater, 7 Plants and trees |
+| 17 | Objects | 1 Miscellaneous, 2 Electronics, 3 Isolated, 4 Sports |
+| 18 | Parks/Outdoor | 1 Miscellaneous |
+| 19 | People | 1 Miscellaneous, 2 Babies, 3 Men, 4 Women, 5 Families, 6 Teens |
+| 20 | Religion | 1 Miscellaneous |
+| 21 | Science | 1 Miscellaneous |
+| 22 | Signs/Symbols | 1 Miscellaneous |
+| 23 | Sports/Recreation | 1 Miscellaneous |
+| 24 | Technology | 1 Miscellaneous, 2 Computers, 3 Electronics |
+| 25 | The Arts | 1 Miscellaneous |
+| 26 | Transportation | 1 Miscellaneous, 2 Cars, 3 Trucks, 4 Water transport, 5 Airplanes |
+| 27 | Vintage | 1 Miscellaneous |
 
 ### Ошибки
 
@@ -393,27 +393,36 @@ curl -N https://microstock.plus/api/agent/v1/events/stream -H "Authorization: Be
 | - | - | - | - |
 | 400 | `invalid_request_error` | `invalid_json`, `missing_param`, `invalid_status`, `batch_too_large` | Исправить запрос; `param` называет поле. В батче не больше 100 элементов. |
 | 401 | `authentication_error` | `invalid_api_key`, `revoked_api_key` | Остановиться. Попросить у пользователя новый ключ с https://microstock.plus/ai-agent-skills. |
-| 403 | `permission_error` | `scope_required`, `not_owner`, `agent_api_disabled` | Сказать пользователю, какого скоупа или настройки не хватает; не обходить. |
-| 404 | `not_found_error` | `file_not_found`, `folder_not_found`, `job_not_found` | Проверить id или путь, получить список заново. |
+| 403 | `permission_error` | `scope_required`, `not_owner`, `endpoint_disabled` | Сказать пользователю, какого скоупа не хватает; не обходить. `endpoint_disabled` — возможность пока недоступна: так и сказать, не повторять. |
+| 404 | `not_found_error` | `file_not_found`, `folder_not_found`, `export_not_found`, `not_found` | Проверить id или путь, получить список заново. `not_found` на любой вызов — Agent API ещё не включён для этого аккаунта. |
 | 405 | `permission_error` | `deletion_not_supported` | Удаление — вручную в веб-интерфейсе. Так и сказать пользователю. |
-| 409 | `conflict_error` | `metadata_conflict`, `quote_expired`, `idempotency_mismatch` | Перечитать и объединить; получить новый расчёт и подтвердить его; для другого запроса — новый Idempotency-Key. |
+| 409 | `conflict_error` | `metadata_conflict`, `idempotency_mismatch`, `file_archived`, `file_processing` | Перечитать и объединить; для другого запроса — новый Idempotency-Key. Файлы в архиве менять нельзя, файлы в обработке — можно позже. |
 | 429 | `rate_limit_error` | `rate_limited` | Подождать `retry-after` секунд и повторить один раз. |
 | 5xx | `api_error` | `upstream_unavailable`, `api_not_configured` | Повторить позже; если не проходит, сообщить `request_id`. |
 
-Пакетные эндпоинты отвечают `200` с ошибками по элементам (например, `nosubmissions` при смене статусов); проверяйте `results[].ok`.
+Пакетные эндпоинты отвечают `200` с ошибками по элементам (например, `metadata_conflict` в батче правок атрибуции); проверяйте `results[].ok`.
 
 ### Лимиты запросов
 
-На ключ: 120 запросов в минуту, 30 изменений (POST и PATCH) в минуту и 2 одновременных потока событий. В каждом ответе есть `x-ratelimit-limit-requests`, `x-ratelimit-remaining-requests` и `x-ratelimit-reset-requests` (секунды). Батч до 100 элементов — это один запрос, поэтому правьте батчами, а не по одному файлу. При `429` подождите `retry-after` секунд и повторите один раз; MCP-сервер делает это сам, если ждать не больше 20 секунд.
+На ключ: 120 запросов в минуту и 30 изменений (POST и PATCH) в минуту. В каждом ответе есть `x-ratelimit-limit-requests`, `x-ratelimit-remaining-requests` и `x-ratelimit-reset-requests` (секунды). Батч до 100 элементов — это один запрос, поэтому правьте батчами, а не по одному файлу. При `429` подождите `retry-after` секунд и повторите один раз; MCP-сервер делает это сам, если ждать не больше 20 секунд.
 
-## Чего нет в v1
+## Чего Agent API не делает
 
-- Удаления чего-либо: файлов, папок, релизов, шаблонов, стоков, аккаунта. Удаление — вручную в веб-интерфейсе.
+**Пока недоступно** (есть в контракте; не предлагайте и не обещайте):
+
+- Смена статусов, в том числе отправка файлов на стоки — загрузка и сабмит.
+- ИИ-атрибуция Microstock+: расчёт цены, платный запуск и прогресс задач.
+- Поток Server-Sent Events и события о смене статусов, загрузках, сабмитах, проверке и ИИ-задачах.
+- Баланс аккаунта (`balance_eur` равен `null`).
+
+**Нет в v1:**
+
 - Загрузки новых файлов, создания и перемещения папок, архивации.
-- Списков id категорий, релизов и шаблонов ИИ-атрибуции.
-- Статусов, кроме `ready`, `queued` и `ignored`, и пробного прогона для смены статусов.
+- Списков релизов и шаблонов ИИ-атрибуции.
 - Платных форматов CSV.
 - Работы с чужими аккаунтами и с папками, которыми поделились другие пользователи.
 - Создания, перевыпуска и отзыва ключей агентов через API (только на https://microstock.plus/ai-agent-skills).
 - Изменения настроек аккаунта, тарифа и баланса.
 - Вебхуков; используйте ленту событий.
+
+**Никогда:** удаления чего-либо — файлов, папок, релизов, шаблонов, стоков, аккаунта. Удаление — вручную в веб-интерфейсе.

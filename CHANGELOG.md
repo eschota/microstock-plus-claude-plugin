@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.0 - 2026-10-02
+
+Aligned with the Agent API release that ships first: files, metadata (with dry run and `if_match_metaver`), CSV exports and the event feed are on; status changes, AI keywording, AI jobs and the Server-Sent Events stream are off (`403 endpoint_disabled`), and keys can't hold `status:write`, `ai:quote` or `ai:run`.
+
+- `server/mplus-mcp.mjs` no longer offers `mplus_set_status`, `mplus_quote_ai_keywording`, `mplus_run_ai_keywording` or `mplus_get_job`. A call to one of them answers "Not available yet (not_available_yet)" without contacting the API, and an API `403 endpoint_disabled` gives the same answer. `MPLUS_ENABLE_PREVIEW_TOOLS=1` offers them again for a server that has those endpoints on.
+- The server instructions, the `mplus_get_account` summary and the `mplus_wait_for_events` description say what is not available yet; `404 not_found` on every call is explained as the Agent API not being switched on for the account; a `null` balance is fine.
+- Categories: at most 3, with the ids of the Microstock+ category table (listed in the guide and in the tool schema).
+- `docs/AI_AGENT_SKILLS.md`, `docs/AI_AGENT_SKILLS.ru.md`, both skills, the commands, the READMEs and the plugin description mark status changes and AI keywording as "not available yet" and tell agents not to offer or promise them. The guides add the category id table, `rejection_reasons`, the events Microstock+ reports now, and the 500-file export limit.
+- Tests: `tests/mock-api.mjs` takes `disabledFeatures` and `apiOff`; the smoke test runs the preview tools with `MPLUS_ENABLE_PREVIEW_TOOLS=1` and adds checks for the default tool list, local refusals, `endpoint_disabled`, the account summary and the switched-off API.
+
 ## 1.0.0 - 2026-10-02
 
 - First release of the Microstock+ agent kit, built against the Agent API v1 contract (`docs/AGENT_API_V1.md`).

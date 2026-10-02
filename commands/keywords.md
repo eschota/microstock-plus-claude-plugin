@@ -11,4 +11,4 @@ Follow the `mplus-keywording` skill:
 2. Write titles, descriptions and keywords to the agency rules in the skill and to the user's instructions. Describe only what is visible, and set `ai_generated` for AI-made content.
 3. Preview with `mplus_update_metadata_batch` and `dry_run: true`, in batches of at most 100 files. Show the old and new metadata and the validation that remains.
 4. Only after the user approves, apply the same items with `dry_run: false`. Resolve each `metadata_conflict` by re-reading the file and merging.
-5. Report what changed. Don't queue uploads or start paid AI keywording from this command; offer them as next steps.
+5. Report what changed. Sending files to agencies and Microstock+ AI keywording are not available through the tools yet, so don't offer them; the user sends the files from My Files.
