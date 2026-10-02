@@ -332,6 +332,9 @@ async function legacySuite(mock, pluginVersion) {
         const patch = mock.requests.filter(entry => entry.method === "PATCH").at(-1);
         assert.match(patch.idempotencyKey, /^[0-9a-f-]{36}$/);
         assert.match(patch.userAgent, /^microstock-plus-mcp\/\d+\.\d+\.\d+$/);
+        // My Files has no metadata-history undo: the summary tells the agent how to revert instead.
+        assert.match(file.summary, /no undo button: to revert, write back the values you read/);
+        assert.doesNotMatch(file.summary, /metadata history/);
     });
 
     await check("409 metadata_conflict: a stale metaver is refused and the current metaver is reported", async () => {
@@ -380,6 +383,8 @@ async function legacySuite(mock, pluginVersion) {
         assert.equal(applied.succeeded, 3);
         assert.equal(mock.control.file(IID.empty43).metaver, 2);
         assert.ok(mock.control.file(IID.maple44).metadata.keywords.includes("foliage"));
+        assert.match(applied.summary, /no undo button: to revert, write back the values you read/);
+        assert.doesNotMatch(applied.summary, /metadata history/);
 
         expectToolError(await callTool(client, "mplus_update_metadata_batch", { items: [items[0], items[0]], dry_run: true }), /appears twice/, "duplicate iid");
         expectToolError(await callTool(client, "mplus_update_metadata_batch", { items }), /dry_run is required/, "dry_run required");

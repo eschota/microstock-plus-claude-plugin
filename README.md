@@ -84,7 +84,7 @@ The server works with any MCP client: Cursor, OpenAI Codex CLI, and others. [doc
 - **No deletion.** There is no delete tool; the server never sends a `DELETE` request, and the API answers any such request with `405 deletion_not_supported`.
 - **No spending.** Nothing the plugin can do today costs money. When Microstock+ AI keywording arrives, it will need the `ai:run` scope (off by default), a quote first, and `confirm_charge_eur` equal to the quoted amount.
 - **No uploads.** The plugin can't send files to agencies yet. When it can, queueing will need `user_confirmed: true`, which Claude sets only after you approve.
-- **No lost edits.** Metadata batches are previewed with a dry run first, and `if_match_metaver` stops Claude from overwriting changes made after it read a file. You can undo metadata changes from the metadata history in My Files.
+- **No lost edits.** Metadata batches are previewed with a dry run first, and `if_match_metaver` stops Claude from overwriting changes made after it read a file.
 - **Only your account.** A key acts on its owner's account, with less power than the owner, and you can revoke it at any time.
 
 ## Troubleshooting

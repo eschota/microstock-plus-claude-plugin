@@ -14,7 +14,7 @@ Use the `microstock-plus` tools. Call `mplus_get_account` first to learn which a
 3. **Preview.** `mplus_update_metadata_batch` with `dry_run: true`, up to 100 items `{iid, patch, if_match_metaver}`. Nothing is written.
 4. **Show and ask.** Per file: old and new title, keywords added and removed, validation that remains. Apply only after the user agrees.
 5. **Apply.** The same items with `dry_run: false`. For each `metadata_conflict`, re-read the file, merge your change into the current metadata, and retry that item with the new `metaver`; never overwrite blindly.
-6. **Report** what changed, with counts. The user can undo changes from the metadata history in My Files.
+6. **Report** what changed, with counts. There is no undo button: if the user wants a change reverted, write back the values you read in step 1.
 
 Patch fields: `title`, `description`, `keywords` (`set` for the whole ordered list, or `add` and/or `remove`), `categories`, `editorial`, `ai_generated`, `illustration`, `releases`, `notes`, and `clear` to empty fields (empty strings are refused). For a single file you can use `mplus_update_metadata` with the same fields.
 

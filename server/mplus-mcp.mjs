@@ -1540,7 +1540,7 @@ async function updateMetadata(args, ctx) {
             ? `Nothing changed: ${data.filename || data.iid} already had these values (metaver ${data.metaver}).`
             : `Updated ${changed.join(", ")} of ${data.filename || data.iid}; it now has ${plural(keywordsOf(data).length, "keyword")} and metaver ${data.metaver}.`,
         issues.length ? `Agencies still report: ${issues.join(", ")}.` : "No validation warnings.",
-        unchanged ? "" : "The user can undo this from the metadata history in My Files."
+        unchanged ? "" : "There is no undo button: to revert, write back the values you read before this change."
     ].filter(Boolean).join(" ");
     return { data, summary, text: describeFileDetails(data, ctx.account) };
 }
@@ -1582,7 +1582,7 @@ async function updateMetadataBatch(args, ctx) {
         ? `Dry run, nothing was written: ${okCount} of ${plural(results.length, "change")} would apply, ${failed.length} would fail${failures}. ` +
           "Show the planned changes to the user; to apply the valid ones, call again with dry_run=false and the same items."
         : `Applied ${okCount} of ${plural(results.length, "change")}; ${failed.length} failed${failures}. ` +
-          (failed.length ? "Failed items were not changed: re-read them with mplus_get_file, fix and retry only those." : "The user can undo changes from the metadata history in My Files.");
+          (failed.length ? "Failed items were not changed: re-read them with mplus_get_file, fix and retry only those." : "There is no undo button: to revert, write back the values you read before these changes.");
     return { data, summary, text: results.map(describeBatchItem).join("\n") };
 }
 
@@ -1888,8 +1888,9 @@ const TOOLS = [
             "ordered list, or add/remove words), categories, editorial, ai_generated, illustration, releases, notes; list fields",
             "in clear to empty them. Pass if_match_metaver (from mplus_get_file or mplus_list_files) so the change fails with",
             "metadata_conflict instead of overwriting a newer edit. ai_generated=true also sets editorial=false. Returns the",
-            "updated file with its new metaver and per-agency validation. Uploads nothing; the user can undo it from the metadata",
-            "history in My Files. For several files use mplus_update_metadata_batch."
+            "updated file with its new metaver and per-agency validation. Uploads nothing. There is no undo button: keep the values",
+            "you read, so you can write them back if the user wants the change reverted. For several files use",
+            "mplus_update_metadata_batch."
         ].join(" "),
         inputSchema: {
             type: "object",

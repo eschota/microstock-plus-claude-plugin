@@ -32,7 +32,7 @@ With an agent key you work **as the user, with less power than the user**. You c
 5. **Never overwrite a newer edit.** Send `if_match_metaver` with every change. On `409 metadata_conflict`, re-read the file and merge.
 6. **Don't invent ids.** Categories come from the fixed table in the reference below. The API cannot list release or AI template ids: reuse ids that already appear on the user's files, or leave those fields to the user.
 7. **Keep the key secret.** Never print, log, store in files or repositories, or send the key anywhere except `https://microstock.plus`.
-8. **Everything you do is visible.** Changes are saved to the user's files at once and show up in My Files; the user can undo metadata changes from the metadata history, and every call is audited with the key's prefix.
+8. **Everything you do is visible.** Changes are saved to the user's files at once and show up in My Files, and every call is audited with the key's prefix. There is no undo button: if the user wants a change reverted, write back the values you read before it.
 
 ## Authentication
 
