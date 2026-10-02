@@ -227,14 +227,14 @@ With `Accept: text/csv` the CSV is returned directly. Paid CSV formats are not i
   `data: <event json>`; heartbeat comment every 20 s; resume with `Last-Event-ID`.
 - Retention: 7 days.
 
-## 6. My Files popup queue (web UI)
+## 6. My Files popup queue (web UI) — planned, not in the v1 MVP
 
 The signed-in user's open My Files page subscribes to the same feed (session-auth
 endpoint) and shows a **queue of popups** (bottom-right, max 3 visible, newest on top,
 auto-hide 8 s, click = filter My Files by the affected iids):
 `🤖 Claude Code · keywords updated on 12 files in /foto/2026 · just now`.
-A badge counts unseen agent events; "Undo" is offered for metadata changes via
-the existing metadata history.
+A badge counts unseen agent events. There is no undo button: an agent reverts a
+change by writing back the values it read before the change.
 
 ## 7. MCP server
 

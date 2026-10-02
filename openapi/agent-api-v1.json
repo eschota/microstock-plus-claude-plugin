@@ -479,7 +479,7 @@
           "metadata"
         ],
         "summary": "Merge-patch one file's metadata",
-        "description": "Changes only the fields present. Send `if_match_metaver` to get `409 metadata_conflict` instead of overwriting a newer edit. The change appears in the user's event feed and can be undone from the metadata history in My Files.\n\nRequired scope: `metadata:write`.",
+        "description": "Changes only the fields present. Send `if_match_metaver` to get `409 metadata_conflict` instead of overwriting a newer edit. The change appears in the user's event feed. There is no undo button: to revert, write back the values read before the change.\n\nRequired scope: `metadata:write`.",
         "security": [
           {
             "agentKey": [
