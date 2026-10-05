@@ -1,11 +1,8 @@
 {
   "mcpServers": {
     "microstock-plus": {
-      "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/server/mplus-mcp.mjs"],
-      "env": {
-        "MPLUS_API_KEY": "${user_config.api_key}"
-      }
+      "type": "http",
+      "url": "https://microstock.plus/mcp"
     }
   }
 }

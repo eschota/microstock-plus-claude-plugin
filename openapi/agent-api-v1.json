@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Microstock+ Agent API",
-    "version": "1.0.0",
+    "version": "1.2.0",
     "summary": "Let AI agents manage a Microstock+ user's portfolio on the user's behalf.",
     "description": "Contract: docs/AGENT_API_V1.md (Agent API v1).\n\n- **An agent acts as the user, with less power.** Every call is scoped to the key owner's own account.\n- **No deletion, ever.** No endpoint, scope or flag removes anything; any `DELETE` returns `405 deletion_not_supported`. Deleting stays manual in the web interface.\n- **Money needs a human.** Paid actions need the `ai:run` scope (off by default), a quote first, and an `Idempotency-Key`.\n- **Conventions.** JSON in and out; every object has `object`; times are ISO-8601 UTC; lists are `{object: \"list\", data, has_more, next_cursor}` with `cursor` and `limit` (1-200, default 50); every response has `x-request-id`.\n- **Idempotency.** Send `Idempotency-Key: <uuid>` on POST and PATCH; a repeat within 24 h returns the stored response with `idempotent-replayed: true`.\n- **Rate limits per key.** 120 requests/min, 30 mutations/min, 2 concurrent streams; headers `x-ratelimit-limit-requests`, `x-ratelimit-remaining-requests`, `x-ratelimit-reset-requests`; `429 rate_limited` with `retry-after`.\n- **Optimistic concurrency.** Every file has `metaver`; send `if_match_metaver` to get `409 metadata_conflict` instead of overwriting a newer edit.\n- **Visibility.** Every change appears in the user's event feed and My Files, and is audited with the key prefix.",
     "contact": {
@@ -209,6 +209,28 @@
           "503": {
             "$ref": "#/components/responses/Unavailable"
           }
+        }
+      },
+      "post": {
+        "operationId": "createFolder",
+        "tags": ["files"],
+        "summary": "Create a folder",
+        "description": "Creates one folder below an existing parent. Required scope: `files:upload`.",
+        "security": [{"agentKey": ["files:upload"]}],
+        "requestBody": {
+          "required": true,
+          "content": {"application/json": {"schema": {"type": "object", "additionalProperties": false, "required": ["directory"], "properties": {"directory": {"type": "string", "pattern": "^/"}}}}}
+        },
+        "responses": {
+          "200": {"description": "Created folder", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Folder"}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "409": {"$ref": "#/components/responses/Conflict"},
+          "429": {"$ref": "#/components/responses/TooManyRequests"},
+          "500": {"$ref": "#/components/responses/ServerError"},
+          "503": {"$ref": "#/components/responses/Unavailable"}
         }
       }
     },
@@ -724,6 +746,74 @@
           "503": {
             "$ref": "#/components/responses/Unavailable"
           }
+        }
+      }
+    },
+    "/uploads/init": {
+      "post": {
+        "operationId": "initializeUpload",
+        "tags": ["files"],
+        "summary": "Initialize direct multipart upload",
+        "description": "Creates a chunk upload ticket for a local binary in an existing directory. Remote source URLs are not accepted. Required scope: `files:upload`.",
+        "security": [{"agentKey": ["files:upload"]}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["filename", "size_bytes", "content_type", "directory"],
+                "properties": {
+                  "filename": {"type": "string", "minLength": 1, "maxLength": 255, "pattern": "^[^/\\\\]+$"},
+                  "size_bytes": {"type": "integer", "minimum": 1},
+                  "content_type": {"type": "string", "pattern": "^[^\\s/]+/[^\\s/]+$"},
+                  "directory": {"type": "string", "pattern": "^/"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Upload ticket",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["object", "file_id", "filename", "size_bytes", "content_type", "directory", "expires_at", "upload"],
+                  "properties": {
+                    "object": {"const": "upload_ticket"},
+                    "file_id": {"type": "string"},
+                    "filename": {"type": "string"},
+                    "size_bytes": {"type": "integer"},
+                    "content_type": {"type": "string"},
+                    "directory": {"type": "string"},
+                    "expires_at": {"type": ["string", "null"], "format": "date-time"},
+                    "upload": {
+                      "type": "object",
+                      "required": ["strategy", "chunk_size_bytes", "chunk_count", "uploaded_chunks", "chunk", "finish"],
+                      "properties": {
+                        "strategy": {"const": "multipart_chunks"},
+                        "chunk_size_bytes": {"type": "integer"},
+                        "chunk_count": {"type": "integer"},
+                        "uploaded_chunks": {"type": "array", "items": {"type": "integer"}},
+                        "chunk": {"type": "object", "required": ["method", "url", "form_fields", "file_field"], "properties": {"method": {"const": "POST"}, "url": {"type": "string", "format": "uri"}, "form_fields": {"type": "object", "additionalProperties": {"type": "string"}}, "file_field": {"const": "chunk"}}},
+                        "finish": {"type": "object", "required": ["method", "url", "form_fields"], "properties": {"method": {"const": "POST"}, "url": {"type": "string", "format": "uri"}, "form_fields": {"type": "object", "additionalProperties": {"type": "string"}}}}
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "429": {"$ref": "#/components/responses/TooManyRequests"},
+          "500": {"$ref": "#/components/responses/ServerError"},
+          "503": {"$ref": "#/components/responses/Unavailable"}
         }
       }
     },
@@ -2123,7 +2213,7 @@
         "required": [
           "object",
           "id",
-          "agencies",
+          "agency",
           "key"
         ],
         "properties": {
@@ -2626,17 +2716,16 @@
             "maxItems": 100,
             "uniqueItems": true
           },
-          "agencies": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "minItems": 1,
-            "uniqueItems": true,
-            "description": "Connected agency ids."
+          "agency": {
+            "type": "string",
+            "description": "One connected agency id."
           },
           "status": {
             "$ref": "#/components/schemas/SettableStatus"
+          },
+          "user_confirmed": {
+            "type": "boolean",
+            "description": "Must be true for queued because it sends files to the agency."
           }
         },
         "additionalProperties": false

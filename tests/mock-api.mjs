@@ -22,7 +22,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 const BASE_PATH = "/api/agent/v1";
-const ALL_SCOPES = ["account:read", "files:read", "metadata:write", "status:write", "csv:export", "events:read", "ai:quote", "ai:run"];
+const ALL_SCOPES = ["account:read", "files:read", "metadata:write", "status:write", "files:upload", "csv:export", "events:read", "ai:quote", "ai:run"];
 const DEFAULT_SCOPES = ALL_SCOPES.filter(scope => scope !== "ai:run");
 const MEDIA_TYPES = ["raster", "vector", "video"];
 const READ_STATUSES = [
@@ -755,16 +755,17 @@ export async function startMockApi({ port = 0, host = "127.0.0.1", rateLimits = 
     }
 
     function statusBatch(ctx) {
-        const { iids, agencies, status } = ctx.body;
+        const { iids, agency, status, user_confirmed: userConfirmed } = ctx.body;
         if (!Array.isArray(iids) || iids.length === 0) throw fail.invalid("missing_param", "iids must be a non-empty list.", "iids");
         if (iids.length > BATCH_MAX_ITEMS) throw fail.invalid("batch_too_large", `At most ${BATCH_MAX_ITEMS} files per call.`, "iids");
-        if (!Array.isArray(agencies) || agencies.length === 0) throw fail.invalid("missing_param", "agencies must be a non-empty list.", "agencies");
+        if (typeof agency !== "string" || !agency) throw fail.invalid("missing_param", "agency is required.", "agency");
         if (!SETTABLE_STATUSES.includes(status)) throw fail.invalid("invalid_status", `status must be one of ${SETTABLE_STATUSES.join(", ")}.`, "status");
+        if (status === "queued" && userConfirmed !== true) throw fail.invalid("confirmation_required", "queued requires user_confirmed=true.", "user_confirmed");
         const results = [];
         const transitions = new Map();
         const queued = [];
         for (const iid of iids) {
-            for (const agencyId of agencies) {
+            for (const agencyId of [agency]) {
                 try {
                     const file = getFileOr404(iid);
                     const previous = setOneStatus(file, agencyId, status);
@@ -787,6 +788,20 @@ export async function startMockApi({ port = 0, host = "127.0.0.1", rateLimits = 
         if (queued.length) simulatePipeline(queued);
         const failed = results.filter(result => !result.ok).length;
         return { body: { object: "batch_result", results, succeeded: results.length - failed, failed } };
+    }
+
+    function createFolder(ctx) {
+        const directory = ctx.body.directory;
+        if (typeof directory !== "string" || !directory.startsWith("/") || directory === "/") {
+            throw fail.invalid("invalid_param", "directory must be a folder path below /.", "directory");
+        }
+        if (FOLDERS.some(folder => folder.path === directory)) throw fail.conflict("folder_exists", `Folder ${directory} already exists.`, "directory");
+        const parent = directory.replace(/\/[^/]+$/, "") || "/";
+        if (parent !== "/" && !FOLDERS.some(folder => folder.path === parent && !folder.archived)) {
+            throw fail.notFound("folder_not_found", `Parent folder ${parent} does not exist.`, "directory");
+        }
+        FOLDERS.push({ path: directory, archived: false });
+        return { body: { object: "folder", path: directory, file_count: 0, subfolder_count: 0, archived: false, status_summary: {} } };
     }
 
     // Queued files move on to uploading, uploaded and submitted, emitting events like M+ does.
@@ -843,6 +858,37 @@ export async function startMockApi({ port = 0, host = "127.0.0.1", rateLimits = 
         state.exports.set(id, { csv, expiresAt: Date.now() + EXPORT_TTL_MS, prefix: ctx.key.prefix });
         pushEvent("export.ready", { export_id: id, rows: files.length, format }, agentActor(ctx.key));
         return { body: exportObject };
+    }
+
+    function initializeUpload(ctx) {
+        const { filename, size_bytes: sizeBytes, content_type: contentType, directory } = ctx.body;
+        if (typeof filename !== "string" || !filename || /[\\/]/.test(filename)) throw fail.invalid("invalid_param", "filename must be a file name without a path.", "filename");
+        if (!Number.isInteger(sizeBytes) || sizeBytes < 1) throw fail.invalid("invalid_param", "size_bytes must be a positive integer.", "size_bytes");
+        if (typeof contentType !== "string" || !contentType.includes("/")) throw fail.invalid("invalid_param", "content_type must be a MIME type.", "content_type");
+        if (!FOLDERS.some(folder => folder.path === directory && !folder.archived)) throw fail.notFound("folder_not_found", `No active folder ${directory}.`, "directory");
+        const id = `upl_${randomBytes(8).toString("hex")}`;
+        return { body: {
+            object: "upload_ticket",
+            file_id: id,
+            filename,
+            directory,
+            size_bytes: sizeBytes,
+            content_type: contentType,
+            expires_at: null,
+            upload: {
+                strategy: "multipart_chunks",
+                chunk_size_bytes: 5 * 1024 * 1024,
+                chunk_count: 1,
+                uploaded_chunks: [],
+                chunk: {
+                    url: `${baseUrl}/uploads/${id}/chunk`,
+                    method: "POST",
+                    form_fields: { fileid: id, chunkNumber: "{chunk_number}" },
+                    file_field: "chunk"
+                },
+                finish: { url: `${baseUrl}/uploads/${id}/finish`, method: "POST", form_fields: { fileid: id } }
+            }
+        } };
     }
 
     function downloadExport(ctx, id) {
@@ -1005,12 +1051,14 @@ export async function startMockApi({ port = 0, host = "127.0.0.1", rateLimits = 
     const routes = [
         ["GET", /^\/me$/, "account:read", getMe],
         ["GET", /^\/folders$/, "files:read", listFolders],
+        ["POST", /^\/folders$/, "files:upload", createFolder],
         ["GET", /^\/files$/, "files:read", listFiles],
         ["POST", /^\/files\/metadata:batch$/, "metadata:write", metadataBatch],
-        ["POST", /^\/files\/status:batch$/, "status:write", statusBatch, "status_changes"],
+        ["POST", /^\/files\/status:batch$/, "status:write", statusBatch],
         ["GET", /^\/files\/([^/]+)$/, "files:read", getFileRoute],
         ["PATCH", /^\/files\/([^/]+)\/metadata$/, "metadata:write", patchMetadata],
         ["POST", /^\/exports\/csv$/, "csv:export", createExport],
+        ["POST", /^\/uploads\/init$/, "files:upload", initializeUpload],
         ["GET", /^\/exports\/([^/]+)\/download$/, "csv:export", downloadExport],
         ["POST", /^\/ai\/keywording:quote$/, "ai:quote", quote, "ai_keywording"],
         ["POST", /^\/ai\/keywording:run$/, "ai:run", run, "ai_keywording"],

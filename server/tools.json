@@ -1,0 +1,2212 @@
+[
+  {
+    "name": "mplus_get_account",
+    "title": "Get the Microstock+ account",
+    "description": "Get the Microstock+ account behind the configured agent key: plan, balance in EUR (null when not reported), connected stock agencies with the agency ids the other tools expect (for example adobestock = Adobe Stock, esp = iStock, shutterstock, pond5), keyword settings, API limits, and the key's name, prefix and scopes (what this key may do). Call it first in a session. Read-only.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "What happened and what to do next."
+        },
+        "object": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "plan": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "expires_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "balance_eur": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "agencies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "settings": {
+          "type": "object",
+          "properties": {
+            "lowercase_keywords": {
+              "type": "boolean"
+            },
+            "max_keywords": {
+              "type": "integer"
+            }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "key": {
+          "type": "object",
+          "properties": {
+            "prefix": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "scopes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "created_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_used_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      },
+      "required": [
+        "summary"
+      ]
+    },
+    "annotations": {
+      "title": "Get the Microstock+ account",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "scope": "account:read",
+    "api": {
+      "method": "GET",
+      "path": "/me"
+    }
+  },
+  {
+    "name": "mplus_list_folders",
+    "title": "List Microstock+ folders",
+    "description": "List the user's Microstock+ folders as a flat tree: path, number of files and subfolders, and per-agency status counts (for example how many files are ready or submitted on Adobe Stock). Use it to find where files are before listing them. Archived folders are left out unless archived=true. Read-only; pass next_cursor as cursor for the next page.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^/",
+          "description": "List this folder's subfolders. Default / (all folders)."
+        },
+        "recursive": {
+          "type": "boolean",
+          "description": "Include nested subfolders at every depth. Default true."
+        },
+        "archived": {
+          "type": "boolean",
+          "description": "true lists archived folders instead of active ones. Default false."
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "description": "Items per page, 1-200. Default 200."
+        },
+        "cursor": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "description": "next_cursor from the previous result of the same call."
+        }
+      },
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "What happened and what to do next."
+        },
+        "object": {
+          "type": "string"
+        },
+        "data": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "object": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "file_count": {
+                "type": "integer"
+              },
+              "subfolder_count": {
+                "type": "integer"
+              },
+              "archived": {
+                "type": "boolean"
+              },
+              "status_summary": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "integer"
+                  }
+                }
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        },
+        "has_more": {
+          "type": "boolean"
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "summary",
+        "data"
+      ]
+    },
+    "annotations": {
+      "title": "List Microstock+ folders",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "scope": "files:read",
+    "api": {
+      "method": "GET",
+      "path": "/folders"
+    }
+  },
+  {
+    "name": "mplus_list_files",
+    "title": "List or search Microstock+ files",
+    "description": "List or search the user's files with their metadata, metaver and per-agency status. Filters: folder (with recursive), free-text search or a list of iids, media type, agency + status (for example agency adobestock, status ready), missing fields (find files without a title, description, keywords or categories) and keyword count (max_keywords 6 finds files that Shutterstock would refuse). Descriptions are included only with expand_metadata=true. Returns up to limit files (default 25; keep it at 50 or less unless you need more); pass next_cursor as cursor for the next page. Read-only.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "folder": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^/",
+          "description": "Folder to list. Default / (the top folder)."
+        },
+        "recursive": {
+          "type": "boolean",
+          "description": "Include files in all subfolders. Default false."
+        },
+        "search": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Text to find in file names, titles and keywords."
+        },
+        "iids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "description": "File id (iid) from mplus_list_files, for example 6abc74e948864d403ea0c559."
+          },
+          "minItems": 1,
+          "maxItems": 200,
+          "uniqueItems": true,
+          "description": "Only these files (instead of search)."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "raster",
+            "vector",
+            "video"
+          ],
+          "description": "Media type: raster (photos and raster illustrations), vector or video."
+        },
+        "agency": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{1,31}$",
+          "description": "Agency id from mplus_get_account, for example adobestock (Adobe Stock), shutterstock, esp (iStock) or pond5."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "ready",
+            "ignored",
+            "queued",
+            "uploading",
+            "uploaded",
+            "uploadfailed",
+            "submitted",
+            "submitfailed",
+            "approved",
+            "rejected",
+            "approvalfailed",
+            "notready",
+            "scheduled",
+            "cannotbequeued",
+            "nosubmissions"
+          ],
+          "description": "Status on the given agency; requires agency."
+        },
+        "missing": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "title",
+              "description",
+              "keywords",
+              "categories"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "Only files that lack any of these fields."
+        },
+        "min_keywords": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 200,
+          "description": "Only files with at least this many keywords."
+        },
+        "max_keywords": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 200,
+          "description": "Only files with at most this many keywords."
+        },
+        "archived": {
+          "type": "boolean",
+          "description": "true lists archived files instead of active ones. Default false."
+        },
+        "updated_since": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 40,
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}",
+          "description": "Only files changed since this ISO-8601 time, for example 2026-10-01T00:00:00Z"
+        },
+        "expand_metadata": {
+          "type": "boolean",
+          "description": "Include descriptions. Default false."
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "description": "Items per page, 1-200. Default 25."
+        },
+        "cursor": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "description": "next_cursor from the previous result of the same call."
+        }
+      },
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "What happened and what to do next."
+        },
+        "object": {
+          "type": "string"
+        },
+        "data": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "object": {
+                "type": "string"
+              },
+              "iid": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "folder": {
+                "type": "string"
+              },
+              "filename": {
+                "type": "string"
+              },
+              "size_bytes": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "created_at": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "archived": {
+                "type": "boolean"
+              },
+              "preview_url": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "thumbnail_url": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "metaver": {
+                "type": "integer"
+              },
+              "metadata": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "description": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "keywords": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "categories": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "cat": {
+                          "type": "integer"
+                        },
+                        "sub": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "editorial": {
+                    "type": "boolean"
+                  },
+                  "ai_generated": {
+                    "type": "boolean"
+                  },
+                  "illustration": {
+                    "type": "boolean"
+                  },
+                  "releases": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "notes": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              "agencies": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "external_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "uploaded_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "submitted_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "errors": {
+                      "type": "array"
+                    },
+                    "validation": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "code": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "has_ai_metadata": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "iid",
+              "metaver"
+            ]
+          }
+        },
+        "has_more": {
+          "type": "boolean"
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "summary",
+        "data"
+      ]
+    },
+    "annotations": {
+      "title": "List or search Microstock+ files",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "scope": "files:read",
+    "api": {
+      "method": "GET",
+      "path": "/files"
+    }
+  },
+  {
+    "name": "mplus_get_file",
+    "title": "Get one Microstock+ file",
+    "description": "Get one file by iid with its full metadata (title, description, keywords in order, categories, editorial, AI-generated and illustration flags, releases, notes), its metaver (needed for safe updates), preview links, and for every agency its status, upload and submission times, errors and validation warnings (for example \"Less than 7 keywords\" on Shutterstock). Read-only.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "iid": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+          "description": "File id (iid) from mplus_list_files, for example 6abc74e948864d403ea0c559."
+        }
+      },
+      "required": [
+        "iid"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "What happened and what to do next."
+        },
+        "object": {
+          "type": "string"
+        },
+        "iid": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "folder": {
+          "type": "string"
+        },
+        "filename": {
+          "type": "string"
+        },
+        "size_bytes": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "created_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "archived": {
+          "type": "boolean"
+        },
+        "preview_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "thumbnail_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "metaver": {
+          "type": "integer"
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "keywords": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "categories": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "cat": {
+                    "type": "integer"
+                  },
+                  "sub": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            },
+            "editorial": {
+              "type": "boolean"
+            },
+            "ai_generated": {
+              "type": "boolean"
+            },
+            "illustration": {
+              "type": "boolean"
+            },
+            "releases": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "notes": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "agencies": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string"
+              },
+              "external_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "uploaded_at": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "submitted_at": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "errors": {
+                "type": "array"
+              },
+              "validation": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "has_ai_metadata": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "summary",
+        "iid",
+        "metaver"
+      ]
+    },
+    "annotations": {
+      "title": "Get one Microstock+ file",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "scope": "files:read",
+    "api": {
+      "method": "GET",
+      "path": "/files/{iid}"
+    }
+  },
+  {
+    "name": "mplus_update_metadata",
+    "title": "Update one file's metadata",
+    "description": "Change the metadata of one file. Only the fields you pass change: title, description, keywords (set the whole ordered list, or add/remove words), categories, editorial, ai_generated, illustration, releases, notes; list fields in clear to empty them. Pass if_match_metaver (from mplus_get_file or mplus_list_files) so the change fails with metadata_conflict instead of overwriting a newer edit. ai_generated=true also sets editorial=false. Returns the updated file with its new metaver and per-agency validation. Uploads nothing. There is no undo button: keep the values you read, so you can write them back if the user wants the change reverted. For several files use mplus_update_metadata_batch.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "iid": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+          "description": "File id (iid) from mplus_list_files, for example 6abc74e948864d403ea0c559."
+        },
+        "if_match_metaver": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The file's metaver when you read it. The change fails with metadata_conflict if the file changed since."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "New title, at most 200 characters: a plain, specific sentence about what is shown."
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "New description. Some agencies (Shutterstock, Adobe Stock) allow 200 characters; longer text is reported as validation, not cut."
+        },
+        "keywords": {
+          "type": "object",
+          "description": "Keyword change: either set (the complete new list) or add and/or remove.",
+          "properties": {
+            "set": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": "^[^,;\\r\\n]+$",
+                "description": "One keyword or short phrase, without commas or semicolons"
+              },
+              "minItems": 0,
+              "maxItems": 50,
+              "uniqueItems": true,
+              "description": "Replace all keywords with this list, most important first. An empty list removes every keyword."
+            },
+            "add": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": "^[^,;\\r\\n]+$",
+                "description": "One keyword or short phrase, without commas or semicolons"
+              },
+              "minItems": 1,
+              "maxItems": 50,
+              "uniqueItems": true,
+              "description": "Keywords to add after the existing ones."
+            },
+            "remove": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": "^[^,;\\r\\n]+$",
+                "description": "One keyword or short phrase, without commas or semicolons"
+              },
+              "minItems": 1,
+              "maxItems": 50,
+              "uniqueItems": true,
+              "description": "Keywords to remove."
+            }
+          },
+          "additionalProperties": false,
+          "minProperties": 1
+        },
+        "categories": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "cat": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Category id."
+              },
+              "sub": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Subcategory id."
+              }
+            },
+            "required": [
+              "cat"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 3,
+          "description": "At most 3 categories as {cat, sub} ids from the Microstock+ category table (omit sub for none): 1 Abstract, 2 Animals/Wildlife, 3 Backgrounds/Textures, 4 Beauty/Fashion, 5 Buildings/Landmarks, 6 Business/Finance, 7 Celebrities, 8 Education, 9 Food and Drink, 10 Healthcare/Medical, 11 Holidays, 12 Illustrations/Clip-Art, 13 Industrial, 14 Interiors, 15 Miscellaneous, 16 Nature, 17 Objects, 18 Parks/Outdoor, 19 People, 20 Religion, 21 Science, 22 Signs/Symbols, 23 Sports/Recreation, 24 Technology, 25 The Arts, 26 Transportation, 27 Vintage. The subcategory ids are in the AI Agent Skills guide (https://microstock.plus/ai-agent-skills/skill.md)."
+        },
+        "editorial": {
+          "type": "boolean",
+          "description": "Editorial use only."
+        },
+        "ai_generated": {
+          "type": "boolean",
+          "description": "Made with generative AI. true also sets editorial to false."
+        },
+        "illustration": {
+          "type": "boolean",
+          "description": "An illustration (drawn or rendered artwork) rather than a photo."
+        },
+        "releases": {
+          "type": "object",
+          "description": "Model/property release change by release id: set, or add and/or remove. The API cannot list releases; use ids already attached to the user's files.",
+          "properties": {
+            "set": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                "description": "Release id such as rel_123"
+              },
+              "minItems": 0,
+              "maxItems": 50,
+              "uniqueItems": true,
+              "description": "Replace all releases. An empty list detaches every release."
+            },
+            "add": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                "description": "Release id such as rel_123"
+              },
+              "minItems": 1,
+              "maxItems": 50,
+              "uniqueItems": true,
+              "description": "Release ids to attach."
+            },
+            "remove": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                "description": "Release id such as rel_123"
+              },
+              "minItems": 1,
+              "maxItems": 50,
+              "uniqueItems": true,
+              "description": "Release ids to detach."
+            }
+          },
+          "additionalProperties": false,
+          "minProperties": 1
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "Free-text notes on the file."
+        },
+        "clear": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "title",
+              "description",
+              "notes",
+              "categories"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "Fields to empty: title, description, notes, categories. (Empty strings are rejected; use this instead.)"
+        }
+      },
+      "required": [
+        "iid"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "What happened and what to do next."
+        },
+        "object": {
+          "type": "string"
+        },
+        "iid": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "folder": {
+          "type": "string"
+        },
+        "filename": {
+          "type": "string"
+        },
+        "size_bytes": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "created_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "archived": {
+          "type": "boolean"
+        },
+        "preview_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "thumbnail_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "metaver": {
+          "type": "integer"
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "keywords": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "categories": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "cat": {
+                    "type": "integer"
+                  },
+                  "sub": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            },
+            "editorial": {
+              "type": "boolean"
+            },
+            "ai_generated": {
+              "type": "boolean"
+            },
+            "illustration": {
+              "type": "boolean"
+            },
+            "releases": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "notes": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "agencies": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string"
+              },
+              "external_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "uploaded_at": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "submitted_at": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "errors": {
+                "type": "array"
+              },
+              "validation": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "has_ai_metadata": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "summary",
+        "iid",
+        "metaver"
+      ]
+    },
+    "annotations": {
+      "title": "Update one file's metadata",
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "scope": "metadata:write",
+    "api": {
+      "method": "PATCH",
+      "path": "/files/{iid}/metadata"
+    }
+  },
+  {
+    "name": "mplus_update_metadata_batch",
+    "title": "Update metadata of many files",
+    "description": "Change the metadata of up to 100 files in one call. Each item is {iid, patch, if_match_metaver} and patch takes the same fields as mplus_update_metadata. Always call with dry_run=true first: it checks every item and returns the would-be metadata and agency validation without writing anything. Show the user the planned changes, then call again with dry_run=false. Items succeed or fail on their own; failed items (for example metadata_conflict when a file changed since your metaver) are listed with their error and stay unchanged.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "properties": {
+              "iid": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                "description": "File id (iid) from mplus_list_files, for example 6abc74e948864d403ea0c559."
+              },
+              "patch": {
+                "type": "object",
+                "description": "Metadata change; only the fields you pass change.",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "description": "New title, at most 200 characters: a plain, specific sentence about what is shown."
+                  },
+                  "description": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000,
+                    "description": "New description. Some agencies (Shutterstock, Adobe Stock) allow 200 characters; longer text is reported as validation, not cut."
+                  },
+                  "keywords": {
+                    "type": "object",
+                    "description": "Keyword change: either set (the complete new list) or add and/or remove.",
+                    "properties": {
+                      "set": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100,
+                          "pattern": "^[^,;\\r\\n]+$",
+                          "description": "One keyword or short phrase, without commas or semicolons"
+                        },
+                        "minItems": 0,
+                        "maxItems": 50,
+                        "uniqueItems": true,
+                        "description": "Replace all keywords with this list, most important first. An empty list removes every keyword."
+                      },
+                      "add": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100,
+                          "pattern": "^[^,;\\r\\n]+$",
+                          "description": "One keyword or short phrase, without commas or semicolons"
+                        },
+                        "minItems": 1,
+                        "maxItems": 50,
+                        "uniqueItems": true,
+                        "description": "Keywords to add after the existing ones."
+                      },
+                      "remove": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100,
+                          "pattern": "^[^,;\\r\\n]+$",
+                          "description": "One keyword or short phrase, without commas or semicolons"
+                        },
+                        "minItems": 1,
+                        "maxItems": 50,
+                        "uniqueItems": true,
+                        "description": "Keywords to remove."
+                      }
+                    },
+                    "additionalProperties": false,
+                    "minProperties": 1
+                  },
+                  "categories": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "cat": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "Category id."
+                        },
+                        "sub": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "Subcategory id."
+                        }
+                      },
+                      "required": [
+                        "cat"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 3,
+                    "description": "At most 3 categories as {cat, sub} ids from the Microstock+ category table (omit sub for none): 1 Abstract, 2 Animals/Wildlife, 3 Backgrounds/Textures, 4 Beauty/Fashion, 5 Buildings/Landmarks, 6 Business/Finance, 7 Celebrities, 8 Education, 9 Food and Drink, 10 Healthcare/Medical, 11 Holidays, 12 Illustrations/Clip-Art, 13 Industrial, 14 Interiors, 15 Miscellaneous, 16 Nature, 17 Objects, 18 Parks/Outdoor, 19 People, 20 Religion, 21 Science, 22 Signs/Symbols, 23 Sports/Recreation, 24 Technology, 25 The Arts, 26 Transportation, 27 Vintage. The subcategory ids are in the AI Agent Skills guide (https://microstock.plus/ai-agent-skills/skill.md)."
+                  },
+                  "editorial": {
+                    "type": "boolean",
+                    "description": "Editorial use only."
+                  },
+                  "ai_generated": {
+                    "type": "boolean",
+                    "description": "Made with generative AI. true also sets editorial to false."
+                  },
+                  "illustration": {
+                    "type": "boolean",
+                    "description": "An illustration (drawn or rendered artwork) rather than a photo."
+                  },
+                  "releases": {
+                    "type": "object",
+                    "description": "Model/property release change by release id: set, or add and/or remove. The API cannot list releases; use ids already attached to the user's files.",
+                    "properties": {
+                      "set": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                          "description": "Release id such as rel_123"
+                        },
+                        "minItems": 0,
+                        "maxItems": 50,
+                        "uniqueItems": true,
+                        "description": "Replace all releases. An empty list detaches every release."
+                      },
+                      "add": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                          "description": "Release id such as rel_123"
+                        },
+                        "minItems": 1,
+                        "maxItems": 50,
+                        "uniqueItems": true,
+                        "description": "Release ids to attach."
+                      },
+                      "remove": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                          "description": "Release id such as rel_123"
+                        },
+                        "minItems": 1,
+                        "maxItems": 50,
+                        "uniqueItems": true,
+                        "description": "Release ids to detach."
+                      }
+                    },
+                    "additionalProperties": false,
+                    "minProperties": 1
+                  },
+                  "notes": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000,
+                    "description": "Free-text notes on the file."
+                  },
+                  "clear": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "title",
+                        "description",
+                        "notes",
+                        "categories"
+                      ]
+                    },
+                    "minItems": 1,
+                    "uniqueItems": true,
+                    "description": "Fields to empty: title, description, notes, categories. (Empty strings are rejected; use this instead.)"
+                  }
+                },
+                "additionalProperties": false,
+                "minProperties": 1
+              },
+              "if_match_metaver": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "The file's metaver when you read it. The change fails with metadata_conflict if the file changed since."
+              }
+            },
+            "required": [
+              "iid",
+              "patch"
+            ],
+            "additionalProperties": false
+          },
+          "description": "One entry per file; each iid at most once."
+        },
+        "dry_run": {
+          "type": "boolean",
+          "description": "true checks and previews without writing. Required: start with true."
+        }
+      },
+      "required": [
+        "items",
+        "dry_run"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "What happened and what to do next."
+        },
+        "object": {
+          "type": "string"
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "iid": {
+                "type": "string"
+              },
+              "ok": {
+                "type": "boolean"
+              },
+              "file": {
+                "type": "object",
+                "properties": {
+                  "object": {
+                    "type": "string"
+                  },
+                  "iid": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  },
+                  "folder": {
+                    "type": "string"
+                  },
+                  "filename": {
+                    "type": "string"
+                  },
+                  "size_bytes": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "created_at": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "archived": {
+                    "type": "boolean"
+                  },
+                  "preview_url": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "thumbnail_url": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "metaver": {
+                    "type": "integer"
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "properties": {
+                      "title": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "description": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "keywords": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "categories": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "cat": {
+                              "type": "integer"
+                            },
+                            "sub": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      "editorial": {
+                        "type": "boolean"
+                      },
+                      "ai_generated": {
+                        "type": "boolean"
+                      },
+                      "illustration": {
+                        "type": "boolean"
+                      },
+                      "releases": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "notes": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    }
+                  },
+                  "agencies": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string"
+                        },
+                        "external_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "uploaded_at": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "submitted_at": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "errors": {
+                          "type": "array"
+                        },
+                        "validation": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "has_ai_metadata": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "iid",
+                  "metaver"
+                ]
+              },
+              "error": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  },
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "param": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            },
+            "required": [
+              "iid",
+              "ok"
+            ]
+          }
+        },
+        "succeeded": {
+          "type": "integer"
+        },
+        "failed": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "summary",
+        "results"
+      ]
+    },
+    "annotations": {
+      "title": "Update metadata of many files",
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "scope": "metadata:write",
+    "api": {
+      "method": "POST",
+      "path": "/files/metadata:batch"
+    }
+  },
+  {
+    "name": "mplus_set_status",
+    "title": "Set agency status (queue uploads)",
+    "description": "Set the per-agency status of up to 100 files: ready (prepared, not sent), queued (send to the agency: upload and submit) or ignored (never send to that agency). Queueing sends the user's files to external stock agencies, so pass user_confirmed=true only after the user explicitly approved these files and agencies in this conversation. Only connected agencies work (see mplus_get_account). The same agency and Microstock+ rules as in the web interface apply, so single items can fail, for example nosubmissions when the submission limit is reached; failures are reported per file and agency.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "iids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "description": "File id (iid) from mplus_list_files, for example 6abc74e948864d403ea0c559."
+          },
+          "minItems": 1,
+          "maxItems": 100,
+          "uniqueItems": true,
+          "description": "Files to change."
+        },
+        "agency": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{1,31}$",
+          "description": "Agency id from mplus_get_account, for example adobestock (Adobe Stock), shutterstock, esp (iStock) or pond5."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "ready",
+            "queued",
+            "ignored"
+          ],
+          "description": "ready, queued (upload and submit) or ignored."
+        },
+        "user_confirmed": {
+          "type": "boolean",
+          "description": "Required true for queued: the user explicitly approved sending these files to this agency."
+        }
+      },
+      "required": [
+        "iids",
+        "agency",
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "What happened and what to do next."
+        },
+        "object": {
+          "type": "string"
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "iid": {
+                "type": "string"
+              },
+              "agency": {
+                "type": "string"
+              },
+              "ok": {
+                "type": "boolean"
+              },
+              "status": {
+                "type": "string"
+              },
+              "previous_status": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "error": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  },
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "param": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            },
+            "required": [
+              "iid",
+              "ok"
+            ]
+          }
+        },
+        "succeeded": {
+          "type": "integer"
+        },
+        "failed": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "summary",
+        "results"
+      ]
+    },
+    "annotations": {
+      "title": "Set agency status (queue uploads)",
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "scope": "status:write",
+    "api": {
+      "method": "POST",
+      "path": "/files/status:batch"
+    }
+  },
+  {
+    "name": "mplus_create_folder",
+    "title": "Create a Microstock+ folder",
+    "description": "Create one folder in the key owner's Microstock+ portfolio so local files can be uploaded into it. Pass the complete directory path beginning with /. This cannot delete, rename or overwrite a folder or file.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "directory": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^/",
+          "description": "Folder path starting with /, for example /foto/2026."
+        }
+      },
+      "required": [
+        "directory"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "What happened and what to do next."
+        },
+        "object": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "file_count": {
+          "type": "integer"
+        },
+        "subfolder_count": {
+          "type": "integer"
+        },
+        "archived": {
+          "type": "boolean"
+        },
+        "status_summary": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            }
+          }
+        }
+      },
+      "required": [
+        "summary",
+        "path"
+      ]
+    },
+    "annotations": {
+      "title": "Create a Microstock+ folder",
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "scope": "files:upload",
+    "api": {
+      "method": "POST",
+      "path": "/folders"
+    }
+  },
+  {
+    "name": "mplus_initialize_upload",
+    "title": "Initialize a Microstock+ file upload",
+    "description": "Create a short-lived upload ticket for one local file. The named Microstock+ directory must already exist. After this call, transfer the local binary directly to upload.chunk.url with the returned method, form_fields and file_field, then call upload.finish. This tool never accepts or fetches a remote URL, and it cannot delete or replace an existing file.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "filename": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[^/\\\\]+$",
+          "description": "File name only, without a path."
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10737418240,
+          "description": "Exact local file size in bytes."
+        },
+        "content_type": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 200,
+          "pattern": "^[^\\s/]+/[^\\s/]+$",
+          "description": "MIME type such as image/jpeg, image/png, application/zip or video/mp4."
+        },
+        "directory": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^/",
+          "description": "Folder path starting with /, for example /foto/2026."
+        }
+      },
+      "required": [
+        "filename",
+        "size_bytes",
+        "content_type",
+        "directory"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "What happened and what to do next."
+        },
+        "object": {
+          "type": "string"
+        },
+        "file_id": {
+          "type": "string"
+        },
+        "filename": {
+          "type": "string"
+        },
+        "directory": {
+          "type": "string"
+        },
+        "size_bytes": {
+          "type": "integer"
+        },
+        "content_type": {
+          "type": "string"
+        },
+        "expires_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "upload": {
+          "type": "object",
+          "properties": {
+            "strategy": {
+              "type": "string"
+            },
+            "chunk_size_bytes": {
+              "type": "integer"
+            },
+            "chunk_count": {
+              "type": "integer"
+            },
+            "uploaded_chunks": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            },
+            "chunk": {
+              "type": "object",
+              "properties": {
+                "url": {
+                  "type": "string"
+                },
+                "method": {
+                  "type": "string"
+                },
+                "form_fields": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "file_field": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "url",
+                "method",
+                "file_field"
+              ]
+            },
+            "finish": {
+              "type": "object",
+              "properties": {
+                "url": {
+                  "type": "string"
+                },
+                "method": {
+                  "type": "string"
+                },
+                "form_fields": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "url",
+                "method",
+                "form_fields"
+              ]
+            }
+          },
+          "required": [
+            "chunk",
+            "finish"
+          ]
+        }
+      },
+      "required": [
+        "summary",
+        "object",
+        "file_id",
+        "upload",
+        "expires_at"
+      ]
+    },
+    "annotations": {
+      "title": "Initialize a Microstock+ file upload",
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "scope": "files:upload",
+    "api": {
+      "method": "POST",
+      "path": "/uploads/init"
+    }
+  },
+  {
+    "name": "mplus_export_csv",
+    "title": "Export metadata as CSV",
+    "description": "Build a metadata CSV (the same layouts as Export CSV in My Files) for up to 500 files, from a list of iids or a folder. Formats: default (filename, description, keywords, categories, release files), with_title (adds the title), importable (for re-import into Microstock+), with_release_names (release names instead of files), without_categories, nimia (Nimia footage template), alamy (Alamy video template). Delimiter comma (for agencies) or semicolon (for Excel). Returns a download_url that works with the agent key until expires_at; include_csv=true also returns the CSV text (up to about 250 KB) so you can save it as a file. Free; changes nothing.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "iids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "description": "File id (iid) from mplus_list_files, for example 6abc74e948864d403ea0c559."
+          },
+          "minItems": 1,
+          "maxItems": 500,
+          "uniqueItems": true,
+          "description": "Files to export (instead of folder)."
+        },
+        "folder": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^/",
+          "description": "Export this folder (instead of iids)."
+        },
+        "recursive": {
+          "type": "boolean",
+          "description": "With folder: include subfolders. Default false."
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "default",
+            "with_title",
+            "importable",
+            "with_release_names",
+            "without_categories",
+            "nimia",
+            "alamy"
+          ],
+          "description": "CSV layout. Default default."
+        },
+        "delimiter": {
+          "type": "string",
+          "enum": [
+            "comma",
+            "semicolon"
+          ],
+          "description": "comma (for agencies, default) or semicolon (for Excel)."
+        },
+        "include_csv": {
+          "type": "boolean",
+          "description": "Also return the CSV text. Default false."
+        }
+      },
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "What happened and what to do next."
+        },
+        "object": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "format": {
+          "type": "string"
+        },
+        "delimiter": {
+          "type": "string"
+        },
+        "rows": {
+          "type": "integer"
+        },
+        "download_url": {
+          "type": "string"
+        },
+        "expires_at": {
+          "type": "string"
+        },
+        "csv": {
+          "type": "string",
+          "description": "The CSV text, when include_csv was true and it fit."
+        },
+        "csv_omitted_reason": {
+          "type": "string",
+          "description": "Why the CSV text is not included although include_csv was true."
+        }
+      },
+      "required": [
+        "summary",
+        "download_url"
+      ]
+    },
+    "annotations": {
+      "title": "Export metadata as CSV",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    },
+    "scope": "csv:export",
+    "api": {
+      "method": "POST",
+      "path": "/exports/csv"
+    }
+  },
+  {
+    "name": "mplus_wait_for_events",
+    "title": "Wait for account events",
+    "description": "Wait up to wait_seconds (at most 25) for new events on the user's account and return them. Microstock+ currently reports the changes made through the Agent API (metadata updates and exports) and agent key changes; upload, submission and review events are not reported yet. Returns as soon as events arrive. Without cursor it starts with the most recent events; pass the returned next_cursor as cursor to continue exactly where you left off. Filter with types. Use it to confirm what changed and to report progress. Read-only.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "cursor": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "description": "next_cursor from the previous mplus_wait_for_events result."
+        },
+        "types": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "file.metadata.updated",
+              "file.status.changed",
+              "file.uploaded",
+              "file.submitted",
+              "file.reviewed",
+              "ai.quote.created",
+              "ai.job.started",
+              "ai.job.completed",
+              "ai.job.failed",
+              "export.ready",
+              "key.created",
+              "key.revoked"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "Only these event types."
+        },
+        "wait_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 25,
+          "description": "How long to wait for new events, 0-25. Default 25."
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "description": "Items per page, 1-200. Default 50."
+        }
+      },
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "What happened and what to do next."
+        },
+        "object": {
+          "type": "string"
+        },
+        "data": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "object": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "created_at": {
+                "type": "string"
+              },
+              "actor": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string"
+                  },
+                  "key_prefix": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "key_name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              "data": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "id",
+              "type"
+            ]
+          }
+        },
+        "has_more": {
+          "type": "boolean"
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "summary",
+        "data"
+      ]
+    },
+    "annotations": {
+      "title": "Wait for account events",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "scope": "events:read",
+    "api": {
+      "method": "GET",
+      "path": "/events"
+    }
+  }
+]

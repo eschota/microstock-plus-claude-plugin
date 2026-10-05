@@ -1,6 +1,6 @@
-# Microstock+ for Claude
+# Microstock+ for AI agents
 
-Manage your stock portfolio by talking to Claude. [Microstock+](https://microstock.plus) keeps your photos, vectors and videos with their titles, descriptions and keywords, checks them against each stock agency's rules, and uploads them to Adobe Stock, Shutterstock, iStock, Pond5 and other agencies. This plugin connects Claude to your Microstock+ account through the Microstock+ Agent API.
+Manage your stock portfolio from Claude Code, ChatGPT, Codex, Cursor and any MCP-compatible agent. [Microstock+](https://microstock.plus) keeps your photos, vectors and videos with their metadata and agency state. This kit connects an agent to the owner's account through the Microstock+ Agent API.
 
 With this plugin, Claude can:
 
@@ -9,8 +9,10 @@ With this plugin, Claude can:
 - **Check statuses and rejections** on each agency, with the reasons agencies gave.
 - **Export CSV** in the free layouts of Export CSV in My Files.
 - **Follow the changes** it makes, through the event feed.
+- **Open previews** through the `preview_url` and `thumbnail_url` returned with each file.
+- **Upload local files** directly to an existing Microstock+ folder with a short-lived upload ticket.
 
-**Coming soon:** queueing uploads to your agencies after you approve them, and Microstock+ AI keywording with a price quote you confirm. The Agent API doesn't offer them yet, so the plugin doesn't either.
+Paid Microstock+ AI actions are outside this integration. Agency status changes use the opt-in `status:write` permission; queueing always requires explicit confirmation.
 
 Nothing can be deleted through the plugin; deleting stays a manual action in the Microstock+ web interface.
 
@@ -34,7 +36,7 @@ In Claude Code you can also run the commands:
 
 | Component | What it does |
 | - | - |
-| `microstock-plus` MCP server | `server/mplus-mcp.mjs`, a dependency-free Node.js server with 8 tools: `mplus_get_account`, `mplus_list_folders`, `mplus_list_files`, `mplus_get_file`, `mplus_update_metadata`, `mplus_update_metadata_batch`, `mplus_export_csv`, `mplus_wait_for_events`. Four more (`mplus_set_status`, `mplus_quote_ai_keywording`, `mplus_run_ai_keywording`, `mplus_get_job`) are offered only with `MPLUS_ENABLE_PREVIEW_TOOLS=1`, for when the Agent API offers status changes and AI keywording. |
+| `microstock-plus` MCP server | `server/mplus-mcp.mjs`, a dependency-free Node.js stdio server with portfolio, preview, metadata, upload-ticket, CSV and event tools. `--dump-tools` emits the canonical remote-gateway catalogue. |
 | `mplus-portfolio-management` skill | Audits, statuses and rejection reasons, CSV exports, following events, and what to do when something fails. |
 | `mplus-keywording` skill | Titles, descriptions, keywords and categories to each agency's rules, AI-generated content, and dry-run batches. |
 | `audit`, `keywords` and `export` commands | Shortcuts for the three most common jobs. |
@@ -44,6 +46,14 @@ In Claude Code you can also run the commands:
 ## Install
 
 ### Claude Code
+
+The simplest connection uses the hosted MCP and opens Microstock+ OAuth in the browser:
+
+```bash
+claude mcp add --transport http microstock-plus https://microstock.plus/mcp
+```
+
+Use the marketplace/plugin commands below only when you also want the packaged skills and slash commands. Public marketplace publication is a separate review step and is not claimed by this repository.
 
 Add the marketplace that hosts this plugin, then install it:
 
@@ -58,10 +68,14 @@ The connector is a local MCP server, so it needs [Node.js](https://nodejs.org) 1
 
 ### Your agent key
 
-1. Sign in at [microstock.plus/ai-agent-skills](https://microstock.plus/ai-agent-skills) and create a key in the **Agent keys** section. Give it a name such as "Claude Code". The default scopes let Claude read your files, edit metadata, export CSV and watch events; statuses and AI keywording can't be added to keys yet. The key starts with `mpk_live_` and is shown once.
-2. Claude Code asks for the key when you enable the plugin. To change it later, run `/plugin configure microstock-plus@microstock-plus` in a session. Claude Code keeps the key in your system's secure credential store, not in a settings file, and passes it only to the plugin's server.
-
+The hosted MCP uses OAuth and does not ask you to copy an agent key. For the optional local stdio server, sign in at [microstock.plus/ai-agent-skills](https://microstock.plus/ai-agent-skills), create a scoped key, and store it only in the MCP client's secure configuration. `status:write` and `files:upload` are opt-in; paid AI scopes are unavailable.
 You can revoke the key on the same page at any time.
+
+### ChatGPT and Codex
+
+In ChatGPT, enable Developer mode under **Settings → Security and login**, open **Apps** or **Plugins** (the label varies by surface/account), press **+**, and connect `https://microstock.plus/mcp`. Microstock+ OAuth opens when access is needed. The portable ChatGPT/Codex package is defined by `plugin.json`, `mcp.json` and `skills/`; it is ready for direct testing, but has not been submitted to the public plugin directory.
+
+In Codex or another client that supports remote MCP URLs, connect the same URL and complete OAuth. The local Node stdio server remains available for clients that prefer an agent key.
 
 ### Claude Desktop, claude.ai and Cowork
 
@@ -82,8 +96,9 @@ The server works with any MCP client: Cursor, OpenAI Codex CLI, and others. [doc
 ## Safety
 
 - **No deletion.** There is no delete tool; the server never sends a `DELETE` request, and the API answers any such request with `405 deletion_not_supported`.
-- **No spending.** Nothing the plugin can do today costs money. When Microstock+ AI keywording arrives, it will need the `ai:run` scope (off by default), a quote first, and `confirm_charge_eur` equal to the quoted amount.
-- **No uploads.** The plugin can't send files to agencies yet. When it can, queueing will need `user_confirmed: true`, which Claude sets only after you approve.
+- **No spending.** Paid AI quote/run tools are not published by this kit.
+- **Direct uploads only.** Upload initialization accepts local file facts (`filename`, byte size, MIME type and destination directory), never a remote source URL.
+- **Controlled agency sending.** `queued` sends files to one agency and is refused unless the user approved the exact files and agency and the call includes `user_confirmed: true`.
 - **No lost edits.** Metadata batches are previewed with a dry run first, and `if_match_metaver` stops Claude from overwriting changes made after it read a file.
 - **Only your account.** A key acts on its owner's account, with less power than the owner, and you can revoke it at any time.
 

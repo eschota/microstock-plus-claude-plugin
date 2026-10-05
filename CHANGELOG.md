@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.0 - 2026-10-05
+
+- Added `mplus_initialize_upload` and `POST /uploads/init` for direct multipart upload of a local binary into an existing Microstock+ folder. The contract accepts no remote source URL and returns the native chunk and finish instructions unchanged.
+- Added `mplus_create_folder` (`POST /folders`) and enabled scoped `mplus_set_status` by default. Status calls target one agency; `queued` requires `user_confirmed: true`.
+- Added the hosted OAuth MCP connection at `https://microstock.plus/mcp`, the one-command Claude Code setup, and current ChatGPT Developer mode instructions.
+- Added portable Agent Plugins manifests (`plugin.json`, `mcp.json`) for ChatGPT and Codex. They are ready for direct testing; no public-directory publication is claimed before review and approval.
+- Paid AI tools remain outside the published catalogue. File deletion remains impossible. `preview_url` and `thumbnail_url` continue to be returned by file reads.
+- Added `--dump-tools` and generated `server/tools.json`: the side-effect-free canonical 11-tool catalogue with schemas, annotations, scopes and Agent API route mappings for the remote gateway.
+
 ## 1.1.0 - 2026-10-02
 
 Aligned with the Agent API release that ships first: files, metadata (with dry run and `if_match_metaver`), CSV exports and the event feed are on; status changes, AI keywording, AI jobs and the Server-Sent Events stream are off (`403 endpoint_disabled`), and keys can't hold `status:write`, `ai:quote` or `ai:run`.

@@ -6,6 +6,7 @@ For AI agents (Claude, Codex, Cursor and other MCP clients) that work for a Micr
 | - | - |
 | Human page and agent keys | https://microstock.plus/ai-agent-skills |
 | API base URL | `https://microstock.plus/api/agent/v1` |
+| Hosted MCP (OAuth) | `https://microstock.plus/mcp` |
 | OpenAPI 3.1 | https://microstock.plus/api/agent/v1/openapi.json |
 | MCP server (one file, Node.js 18+) | https://microstock.plus/ai-agent-skills/mplus-mcp.mjs |
 | This file | https://microstock.plus/ai-agent-skills/skill.md |
@@ -19,15 +20,17 @@ With an agent key you work **as the user, with less power than the user**. You c
 - read folders, files, metadata, per-agency statuses, rejection reasons and validation;
 - edit metadata, one file at a time or in batches with a dry run;
 - export metadata as CSV;
+- inspect `preview_url` and `thumbnail_url` for each file;
+- initialize a direct upload of a local file into an existing folder;
 - watch an event feed of the changes made through the Agent API.
 
-**Not available yet.** Changing statuses (including sending files to agencies for upload and submit), Microstock+ AI keywording (price quotes, paid runs and job progress) and the Server-Sent Events stream belong to the contract but are switched off in the current release: the API answers `403 endpoint_disabled`, keys can't get the `status:write`, `ai:quote` and `ai:run` scopes, and the MCP server doesn't offer those tools. Don't offer or promise these features, and never say that you queued, submitted or paid for anything. If the user asks for them, say they are coming, and that for now the user does them in the Microstock+ web interface (My Files). Instead of AI keywording you can write titles, descriptions and keywords yourself (workflows B and C).
+**Outside this release.** Paid Microstock+ AI keywording tools are not published. Status changes require the opt-in `status:write` scope. File upload into M+ is separate from sending a file to a stock agency.
 
 ## Rules you must follow
 
 1. **Only the key owner's account.** Every call acts on the account that owns the key. There is no access to other users or to folders shared by other people.
 2. **Nothing can be deleted.** No endpoint, tool, scope or flag deletes files, folders, releases, templates, agencies or the account; any `DELETE` request answers `405 deletion_not_supported`. If the user asks you to delete something, say that deleting is done by hand in the Microstock+ web interface (My Files), and never claim that you deleted anything.
-3. **No spending, no uploads.** Nothing an agent can do today costs money or sends files anywhere: AI keywording and status changes are not available yet (see above). When they arrive, AI keywording will need the user's explicit confirmation of a quoted price, and sending files to agencies an explicit yes for the files and agencies.
+3. **No spending; direct uploads only.** Paid AI tools are unavailable. For a local upload, initialize a ticket with file facts, send the local bytes to its chunk endpoint, and finish it. Never give the API a remote source URL.
 4. **Preview before you write.** Run every metadata batch with `dry_run: true` first, show the planned changes, then apply them.
 5. **Never overwrite a newer edit.** Send `if_match_metaver` with every change. On `409 metadata_conflict`, re-read the file and merge.
 6. **Don't invent ids.** Categories come from the fixed table in the reference below. The API cannot list release or AI template ids: reuse ids that already appear on the user's files, or leave those fields to the user.
@@ -52,9 +55,11 @@ With an agent key you work **as the user, with less power than the user**. You c
 | `account:read` | `GET /me` | on |
 | `files:read` | folders, files, file details and validation | on |
 | `metadata:write` | metadata patch and batch | on |
+| `files:upload` | direct local-file upload into an existing folder | on |
 | `csv:export` | free CSV exports | on |
 | `events:read` | event feed (long poll) | on |
-| `status:write` | status batch (`ready`, `queued`, `ignored`) | not available yet |
+| `status:write` | status batch (`ready`, `queued`, `ignored`) | opt-in |
+| `files:upload` | create folders and upload local files | opt-in |
 | `ai:quote` | AI keywording price quote | not available yet |
 | `ai:run` | AI keywording run (charges the balance) | not available yet |
 
@@ -64,9 +69,20 @@ Keys can hold only the first five scopes today; the last three can't be added un
 
 ### MCP server (recommended)
 
+For Claude Code, the shortest setup uses the hosted OAuth MCP:
+
+```bash
+claude mcp add --transport http microstock-plus https://microstock.plus/mcp
+```
+
+For ChatGPT, enable Developer mode under **Settings → Security and login**, open
+**Apps** or **Plugins** (the label varies by surface/account), press **+**, paste `https://microstock.plus/mcp`, and complete the
+Microstock+ OAuth login. Public directory publication is a separate review step; this
+package is for direct connection and testing until that approval occurs.
+
 `mplus-mcp.mjs` is a single-file MCP server with no dependencies. It needs Node.js 18 or newer and the key in the `MPLUS_API_KEY` environment variable, and it talks only to `https://microstock.plus` over HTTPS. Download it from https://microstock.plus/ai-agent-skills/mplus-mcp.mjs?download=1 and use an absolute path in the snippets below.
 
-The tools for status changes and AI keywording (`mplus_set_status`, `mplus_quote_ai_keywording`, `mplus_run_ai_keywording`, `mplus_get_job`) are hidden and answer "not available yet" unless the server runs with `MPLUS_ENABLE_PREVIEW_TOOLS=1`; leave that off with the current API.
+Paid AI tools are not part of the published MCP catalogue. Optional status tools appear only when enabled by the production API and key scopes.
 
 **Claude Code, with the plugin.** The `microstock-plus` plugin bundles the server, two skills and three commands, and keeps the key in the system's secure credential store. After you add the marketplace that hosts the plugin:
 
@@ -148,15 +164,14 @@ curl -s https://microstock.plus/api/agent/v1/me -H "Authorization: Bearer $MPLUS
 | `mplus_get_file` | `GET /files/{iid}` | `files:read` | One file: full metadata, metaver, statuses, validation |
 | `mplus_update_metadata` | `PATCH /files/{iid}/metadata` | `metadata:write` | Merge-patch one file |
 | `mplus_update_metadata_batch` | `POST /files/metadata:batch` | `metadata:write` | Up to 100 patches, per-item results, `dry_run` |
-| `mplus_set_status` | `POST /files/status:batch` | `status:write` | **Not available yet** (`403 endpoint_disabled`): set `ready`, `queued` or `ignored` per agency |
+| `mplus_initialize_upload` | `POST /uploads/init` | `files:upload` | Initialize direct multipart upload of one local file |
+| `mplus_set_status` | `POST /files/status:batch` | `status:write` | Set `ready`, `queued` or `ignored` for one agency; queued requires confirmation |
+| `mplus_create_folder` | `POST /folders` | `files:upload` | Create one folder below an existing parent |
 | `mplus_export_csv` | `POST /exports/csv` | `csv:export` | CSV export (free formats) |
-| `mplus_quote_ai_keywording` | `POST /ai/keywording:quote` | `ai:quote` | **Not available yet**: AI keywording price quote |
-| `mplus_run_ai_keywording` | `POST /ai/keywording:run` | `ai:run` | **Not available yet**: run a quote, paid |
-| `mplus_get_job` | `GET /jobs/{id}` | `files:read` | **Not available yet**: AI job progress |
 | `mplus_wait_for_events` | `GET /events` | `events:read` | Long-poll the event feed (up to 25 s) |
 | — | `GET /events/stream` | `events:read` | **Not available yet**: Server-Sent Events |
 
-Start a session with `mplus_get_account` (`GET /me`): it tells you which agencies are connected, their ids, and what the key may do. When the key can read its account, the MCP server lists only the tools its scopes allow; the four tools marked "not available yet" are not offered at all in this release.
+Start a session with `mplus_get_account` (`GET /me`): it tells you which agencies are connected, their ids, and what the key may do. The MCP server lists only the tools its scopes allow. Paid AI tools are not offered.
 
 ## Workflows
 
@@ -233,9 +248,9 @@ curl -s -X POST https://microstock.plus/api/agent/v1/files/metadata:batch \
                  "keywords": {"add": ["golden", "fall", "trees", "aerial"]}}}]}'
 ```
 
-### D. Statuses and uploads (not available yet)
+### D. Statuses and uploads
 
-Reading statuses works: `mplus_list_files` with `agency` and `status` (for example every file `rejected` on Adobe Stock), and `mplus_get_file` for one file, with `rejection_reasons` when the agency gave any. Changing them is not available yet: `POST /files/status:batch` answers `403 endpoint_disabled`, keys can't get `status:write`, and the MCP server doesn't offer `mplus_set_status`. Don't offer or promise to set `ready`, `queued` (send to the agency: upload and submit) or `ignored`. When files are ready, tell the user which files and agencies you suggest, and that they send them from My Files.
+Read statuses with `mplus_list_files` and `mplus_get_file`. With `status:write`, call `mplus_set_status` for one `agency`: `ready`, `ignored`, or `queued`. `queued` sends the files to that agency, so show the exact files and agency, obtain explicit approval, and pass `user_confirmed: true`. Do not set progress or review-result states manually. To upload a new local file into M+, create a missing destination with `mplus_create_folder`, initialize with `mplus_initialize_upload`, transfer all missing chunks, then call the returned finish endpoint. Never submit a remote source URL.
 
 ### E. Export CSV
 

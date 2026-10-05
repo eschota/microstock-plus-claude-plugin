@@ -40,6 +40,7 @@ the MCP server, the Claude plugin, and the public "AI Agent Skills" page.
 | `files:read` | folders, files, file details, validation | on |
 | `metadata:write` | metadata patch / batch | on |
 | `status:write` | status batch (`ready`, `queued`, `ignored`) | on |
+| `files:upload` | initialize a direct upload into an existing folder | on |
 | `csv:export` | free CSV exports | on |
 | `events:read` | event feed / stream | on |
 | `ai:quote` | AI keywording price quote | on |
@@ -156,10 +157,11 @@ Event types: `file.metadata.updated`, `file.status.changed` (data: agency, from,
 | PATCH | `/files/{iid}/metadata` | metadata:write | merge-patch metadata of one file |
 | POST | `/files/metadata:batch` | metadata:write | up to 100 patches, per-item results, `dry_run` |
 | POST | `/files/status:batch` | status:write | set `ready`/`queued`/`ignored` for agencies |
+| POST | `/uploads/init` | files:upload | create a short-lived direct upload ticket |
 | POST | `/exports/csv` | csv:export | build a CSV (free formats) |
-| POST | `/ai/keywording:quote` | ai:quote | price quote for AI keywording |
-| POST | `/ai/keywording:run` | ai:run | run a quoted job (charges balance) |
-| GET | `/jobs/{id}` | files:read | AI job progress |
+| POST | `/ai/keywording:quote` | ai:quote | disabled; outside the agent release |
+| POST | `/ai/keywording:run` | ai:run | disabled; outside the agent release |
+| GET | `/jobs/{id}` | files:read | disabled; outside the agent release |
 | GET | `/events` | events:read | long-poll feed (`since`, `wait` ≤ 25 s) |
 | GET | `/events/stream` | events:read | Server-Sent Events, `Last-Event-ID` resume |
 | any | `DELETE ...` | — | always `405 deletion_not_supported` |
@@ -199,9 +201,14 @@ shown as "AI generated" in My Files; empty strings never silently clear a field
 
 ### POST /files/status:batch
 
-`{"iids": [...], "agencies": ["esp", "shutterstock"], "status": "queued"}` → per-item results.
+`{"iids": [...], "agency": "shutterstock", "status": "queued", "user_confirmed": true}` → per-item results.
 Only connected agencies; Pond5 release guard and M+ submission limits apply exactly as
 in the web UI (`nosubmissions` is returned as an item error, not a crash).
+
+### POST /folders
+
+`{"directory":"/foto/2026/new-shoot"}` creates one folder below an existing parent.
+It cannot delete, rename or overwrite files or folders. Required scope: `files:upload`.
 
 ### POST /exports/csv
 
@@ -211,7 +218,18 @@ in the web UI (`nosubmissions` is returned as an item error, not a crash).
 "download_url": "https://microstock.plus/api/agent/v1/exports/exp_.../download", "expires_at": "..."}`.
 With `Accept: text/csv` the CSV is returned directly. Paid CSV formats are not in v1.
 
+### POST /uploads/init
+
+`{"filename":"photo.jpg","size_bytes":123456,"content_type":"image/jpeg","directory":"/foto/2026"}`
+returns a short-lived `upload` ticket. Transfer the local binary directly to
+`upload.chunk.url` with its `method`, `form_fields` and `file_field`, then call the
+returned `upload.finish` endpoint. The destination directory must already exist.
+The endpoint does not accept a remote source URL and never downloads an arbitrary URL.
+
 ### AI keywording
+
+These endpoints are disabled and are not published as MCP tools in 1.2.0. They remain
+in this contract only as reserved compatibility paths; paid AI is outside this release.
 
 1. `POST /ai/keywording:quote {"iids": [...], "mode": "replace|skip", "template_id": null}` →
    `{"object": "ai_quote", "quote_id": "...", "files": 40, "amount_eur": 1.20, "expires_at": "..."}`
@@ -240,9 +258,9 @@ change by writing back the values it read before the change.
 
 Tools (names stable): `mplus_get_account`, `mplus_list_folders`, `mplus_list_files`,
 `mplus_get_file`, `mplus_update_metadata`, `mplus_update_metadata_batch`,
-`mplus_set_status`, `mplus_export_csv`, `mplus_quote_ai_keywording`,
-`mplus_run_ai_keywording` (only if the key has `ai:run`), `mplus_get_job`,
-`mplus_wait_for_events`. Every tool declares `outputSchema` and returns
+`mplus_initialize_upload`, `mplus_export_csv`, `mplus_wait_for_events`. Optional
+status tools appear only when production scopes enable them. Paid AI tools are outside
+the published catalogue. Every tool declares `outputSchema` and returns
 `structuredContent`; annotations: reads `readOnlyHint: true`; writes
 `destructiveHint: false, idempotentHint: true` (status/metadata are reversible);
 no tool can delete.

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "microstock-plus",
+  "version": "1.2.0",
+  "description": "Manage Microstock+ portfolio files, previews, metadata, uploads and CSV exports without deletion or paid AI actions.",
+  "author": {
+    "name": "Qwertystock / Microstock+",
+    "url": "https://microstock.plus"
+  },
+  "homepage": "https://microstock.plus/ai-agent-skills",
+  "license": "MIT",
+  "keywords": ["microstock", "portfolio", "metadata", "file-upload", "mcp"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Microstock+",
+        "shortDescription": "Manage your Microstock+ portfolio",
+        "longDescription": "Find and inspect portfolio files, open preview links, safely edit metadata, initialize direct uploads, export CSV and follow account events. File deletion and paid AI actions are unavailable.",
+        "developerName": "Qwertystock / Microstock+",
+        "category": "Productivity",
+        "capabilities": ["Read", "Write"],
+        "websiteURL": "https://microstock.plus/ai-agent-skills",
+        "defaultPrompt": [
+          "Audit my newest Microstock+ folder for missing metadata.",
+          "Show previews for files that need keywords, then propose fixes.",
+          "Upload this local file to my selected Microstock+ folder.",
+          "Export this folder's metadata as CSV."
+        ],
+        "brandColor": "#5B5CE2"
+      }
+    }
+  }
+}

@@ -6,6 +6,7 @@
 | - | - |
 | Страница для людей и ключи агентов | https://microstock.plus/ai-agent-skills |
 | Базовый URL API | `https://microstock.plus/api/agent/v1` |
+| Облачный MCP (OAuth) | `https://microstock.plus/mcp` |
 | OpenAPI 3.1 | https://microstock.plus/api/agent/v1/openapi.json |
 | MCP-сервер (один файл, Node.js 18+) | https://microstock.plus/ai-agent-skills/mplus-mcp.mjs |
 | Этот файл | https://microstock.plus/ai-agent-skills/skill.md |
@@ -19,9 +20,11 @@ Microstock+ (M+) — рабочее место стокера. В нём леж�
 - читать папки, файлы, атрибуцию, статусы по стокам, причины отказов и результаты проверки (валидацию);
 - править атрибуцию: по одному файлу или батчем с пробным прогоном (dry run);
 - выгружать атрибуцию в CSV;
+- открывать `preview_url` и `thumbnail_url` каждого файла;
+- инициализировать прямую загрузку локального файла в существующую папку;
 - следить за лентой событий: изменения, сделанные через Agent API.
 
-**Пока недоступно.** Смена статусов (в том числе отправка файлов на стоки — загрузка и сабмит), ИИ-атрибуция Microstock+ (расчёт цены, платный запуск и прогресс задач) и поток Server-Sent Events есть в контракте, но в текущем релизе выключены: API отвечает `403 endpoint_disabled`, ключам нельзя выдать скоупы `status:write`, `ai:quote` и `ai:run`, а MCP-сервер не предлагает эти инструменты. Не предлагайте и не обещайте эти возможности и никогда не говорите, что что-то поставили в очередь, засабмитили или оплатили. Если пользователь просит, скажите, что это появится позже, а пока он делает это сам в веб-интерфейсе Microstock+ («Мои файлы»). Вместо ИИ-атрибуции можете сами написать названия, описания и ключи (сценарии B и C).
+**За рамками релиза.** Платные инструменты ИИ-атрибуции Microstock+ не публикуются. Смена статусов требует отдельного скоупа `status:write`; `queued` разрешён только после явного подтверждения точных файлов и стока. Загрузка локального файла в M+ требует `files:upload` и отличается от отправки файла на сток.
 
 ## Правила, которые нужно соблюдать
 
@@ -54,7 +57,8 @@ Microstock+ (M+) — рабочее место стокера. В нём леж�
 | `metadata:write` | правка атрибуции: одного файла и батчем | включён |
 | `csv:export` | бесплатные выгрузки CSV | включён |
 | `events:read` | лента событий (long poll) | включён |
-| `status:write` | пакетная смена статусов (`ready`, `queued`, `ignored`) | пока недоступен |
+| `status:write` | пакетная смена статусов (`ready`, `queued`, `ignored`) | выдаётся отдельно |
+| `files:upload` | создание папок и загрузка локальных файлов | выдаётся отдельно |
 | `ai:quote` | расчёт цены ИИ-атрибуции | пока недоступен |
 | `ai:run` | запуск ИИ-атрибуции (списывает деньги с баланса) | пока недоступен |
 
@@ -64,9 +68,20 @@ Microstock+ (M+) — рабочее место стокера. В нём леж�
 
 ### MCP-сервер (рекомендуется)
 
+Самое короткое подключение в Claude Code использует облачный OAuth MCP:
+
+```bash
+claude mcp add --transport http microstock-plus https://microstock.plus/mcp
+```
+
+В ChatGPT включите Developer mode в **Settings → Security and login**, откройте
+**Apps** или **Plugins** (название зависит от поверхности и аккаунта), нажмите **+**, вставьте `https://microstock.plus/mcp` и завершите OAuth-вход
+Microstock+. Публикация в общем каталоге требует отдельной проверки; до этого пакет
+предназначен для прямого подключения и тестирования.
+
 `mplus-mcp.mjs` — MCP-сервер в одном файле, без зависимостей. Нужен Node.js 18 или новее и ключ в переменной окружения `MPLUS_API_KEY`; сервер обращается только к `https://microstock.plus` по HTTPS. Скачайте его по ссылке https://microstock.plus/ai-agent-skills/mplus-mcp.mjs?download=1 и в примерах ниже укажите абсолютный путь.
 
-Инструменты смены статусов и ИИ-атрибуции (`mplus_set_status`, `mplus_quote_ai_keywording`, `mplus_run_ai_keywording`, `mplus_get_job`) скрыты и отвечают «пока недоступно», если сервер не запущен с `MPLUS_ENABLE_PREVIEW_TOOLS=1`; с текущим API эту настройку не включайте.
+Платные AI-инструменты не входят в опубликованный каталог MCP. Опциональная смена статусов появляется только когда её разрешают production API и скоупы ключа.
 
 **Claude Code с плагином.** Плагин `microstock-plus` включает сервер, два навыка и три команды и хранит ключ в защищённом хранилище системы. После того как добавлен маркетплейс с плагином:
 
@@ -148,7 +163,8 @@ curl -s https://microstock.plus/api/agent/v1/me -H "Authorization: Bearer $MPLUS
 | `mplus_get_file` | `GET /files/{iid}` | `files:read` | Один файл: вся атрибуция, metaver, статусы, валидация |
 | `mplus_update_metadata` | `PATCH /files/{iid}/metadata` | `metadata:write` | Правка атрибуции одного файла (merge patch) |
 | `mplus_update_metadata_batch` | `POST /files/metadata:batch` | `metadata:write` | Батч до 100 правок, результат по каждой, `dry_run` |
-| `mplus_set_status` | `POST /files/status:batch` | `status:write` | **Пока недоступно** (`403 endpoint_disabled`): статусы `ready`, `queued` или `ignored` по стокам |
+| `mplus_set_status` | `POST /files/status:batch` | `status:write` | `ready`, `queued` или `ignored` для одного стока; `queued` требует подтверждения |
+| `mplus_create_folder` | `POST /folders` | `files:upload` | Создать папку внутри существующей родительской папки |
 | `mplus_export_csv` | `POST /exports/csv` | `csv:export` | Выгрузка CSV (бесплатные форматы) |
 | `mplus_quote_ai_keywording` | `POST /ai/keywording:quote` | `ai:quote` | **Пока недоступно**: расчёт цены ИИ-атрибуции |
 | `mplus_run_ai_keywording` | `POST /ai/keywording:run` | `ai:run` | **Пока недоступно**: запуск по расчёту, платно |

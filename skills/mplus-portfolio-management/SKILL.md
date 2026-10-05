@@ -1,6 +1,6 @@
 ---
 name: mplus-portfolio-management
-description: Manage a stock contributor's Microstock+ (M+) portfolio with the microstock-plus tools - audit folders for missing or weak metadata, check per-agency statuses, rejection reasons and validation on stock agencies such as Adobe Stock, Shutterstock, iStock and Pond5, export metadata as CSV, and follow the changes made through the event feed. Changing statuses and sending files to agencies (upload and submit) are not available through the tools yet. Use when the user mentions Microstock+, M+, microstock.plus, their stock portfolio or My Files, uploading or submitting files to stock agencies, file statuses, rejections, or CSV exports.
+description: Manage a stock contributor's Microstock+ (M+) portfolio with the microstock-plus tools - inspect files and previews, audit or edit metadata, initialize direct uploads of local files, check agency statuses, export CSV, and follow events. Use when the user mentions Microstock+, M+, microstock.plus, their portfolio, My Files, uploads, metadata, statuses, rejections, previews, or CSV exports.
 ---
 
 # Manage a Microstock+ portfolio
@@ -16,10 +16,10 @@ Microstock+ keeps the user's stock photos, vectors and videos with their titles,
 ## Rules
 
 1. **Nothing can be deleted.** No tool deletes anything. If the user asks to delete files, folders or anything else, say that deleting is done by hand in the Microstock+ web interface (My Files). Never claim that something was deleted.
-2. **Statuses and uploads are not available yet.** The tools read statuses but can't change them: setting files ready, queueing uploads and submitting to agencies are not available through the agent tools yet. Don't offer or promise them, and never say that files were queued or submitted. If the user asks, say it is coming and that for now they send files from My Files.
+2. **File upload is direct and scoped.** Call `mplus_initialize_upload` only for a local file the user selected. Transfer its bytes directly to the returned `upload.chunk` endpoint, then call `upload.finish`. Never provide a remote source URL. The destination directory must already exist.
 3. **Nothing paid.** Microstock+ AI keywording is not available through the tools yet either, so nothing you can do costs money. Write metadata yourself with the `mplus-keywording` skill.
 4. **Preview metadata batches** with `dry_run: true` before applying them, and pass `if_match_metaver`.
-5. **Keep the agent key out of the conversation.** Never ask the user to paste it into the chat. In Claude Code they set it with `/plugin configure microstock-plus@microstock-plus`.
+5. **Keep credentials out of the conversation.** Remote clients use the Microstock+ OAuth login. Local stdio clients store the agent key in their MCP configuration; never ask the user to paste it into chat.
 
 ## Audit a folder
 
@@ -32,15 +32,22 @@ Change nothing; report and propose.
 2. Page through `next_cursor`. Read the worst files with `mplus_get_file`: `agencies.<id>.validation` says what is wrong, for example `keywords_min` "Less than 7 keywords".
 3. Report a short table (problem, number of files), then the worst files (name, iid, problem), and propose fixes, for example writing the missing metadata with the `mplus-keywording` skill.
 
-## Statuses and rejections (read only)
+## Statuses and rejections
 
 - Find files by status with `mplus_list_files`, `agency` + `status`: for example `rejected` on `adobestock`, `notready` on `shutterstock`, or `submitted` (in review).
 - Read the details with `mplus_get_file`: per agency `validation`, `errors` and `rejection_reasons` when the agency gave a reason.
-- You can't change statuses. Suggest which files look ready for which agencies; the user sends them from My Files.
+- With `status:write`, `mplus_set_status` can set `ready`, `ignored` or `queued` for one agency and up to 100 files. `queued` starts upload/submission to that agency: show the exact files and agency, obtain explicit user approval, then pass `user_confirmed: true`. Never set upload progress or review-result states manually.
 
 ## Export CSV
 
 `mplus_export_csv` exports up to 500 files from `iids` or a `folder`. Formats are the layouts of Export CSV in My Files: `default` (agency upload forms), `with_title`, `importable` (re-import into Microstock+), `with_release_names`, `without_categories`, `nimia` (Nimia footage), `alamy` (Alamy video); paid layouts such as the Shutterstock and Pond5 CSVs are not available. Delimiter `comma` for agencies or `semicolon` for Excel. With `include_csv: true` the CSV text comes back in the `csv` field: save it unchanged as a `.csv` file when you can write files, and tell the user where it is. Otherwise give the `download_url`, which works with the agent key until `expires_at`. Split bigger exports by subfolder.
+
+## Upload a local file
+
+1. Determine the exact file name, byte size and MIME type locally, and ask which Microstock+ directory to use when it is ambiguous. If it does not exist, create it with `mplus_create_folder`.
+2. Call `mplus_initialize_upload` with only `filename`, `size_bytes`, `content_type` and `directory`.
+3. Send the local binary to `upload.chunk.url` using its `method`, `form_fields` and `file_field`, then call `upload.finish` as returned. Never invent endpoints or send a remote URL.
+4. Re-read the new file or follow events and report its iid and preview links when they become available.
 
 ## Follow changes
 

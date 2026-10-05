@@ -34,7 +34,7 @@ import { createInterface } from "node:readline";
 
 const SERVER_NAME = "microstock-plus";
 const SERVER_TITLE = "Microstock+";
-const SERVER_VERSION = "1.1.0";
+const SERVER_VERSION = "1.2.0";
 const SERVER_INFO = Object.freeze({
     name: SERVER_NAME,
     title: SERVER_TITLE,
@@ -90,6 +90,7 @@ const HTTP_ACCOUNT_CACHE_MAX = 100;
 const LIST_LIMIT_MAX = 200;
 const BATCH_MAX_ITEMS = 100;
 const EXPORT_MAX_IIDS = 500;
+const UPLOAD_MAX_BYTES = 10 * 1024 * 1024 * 1024;
 const AI_MAX_IIDS = 1000;
 const EVENT_WAIT_MAX_S = 25;
 const TITLE_MAX = 200;
@@ -137,6 +138,7 @@ const SCOPE_ABILITIES = [
     ["status:write", "set statuses and queue uploads"],
     ["csv:export", "export CSV"],
     ["events:read", "watch events"],
+    ["files:upload", "create folders and upload new files"],
     ["ai:quote", "quote AI keywording"],
     ["ai:run", "run paid AI keywording"]
 ];
@@ -144,8 +146,9 @@ const SCOPE_ABILITIES = [
 // Status changes (queueing uploads), AI keywording and AI jobs belong to the contract, but the Agent API
 // release that ships now keeps them switched off: it answers 403 endpoint_disabled and keys cannot hold
 // their scopes. Their tools are offered only with MPLUS_ENABLE_PREVIEW_TOOLS=1, for a server that has them on.
+// Compatibility test switch only. It is intentionally undocumented; production catalogues never include feature tools.
 const PREVIEW_TOOLS = /^(1|true|yes)$/i.test(process.env.MPLUS_ENABLE_PREVIEW_TOOLS || "");
-const PREVIEW_SCOPES = new Set(["status:write", "ai:quote", "ai:run"]);
+const PREVIEW_SCOPES = new Set(["ai:quote", "ai:run"]);
 const NOT_AVAILABLE = Object.freeze({
     status_changes: "Not available yet (not_available_yet): changing statuses and sending files to stock agencies " +
         "(upload and submit) is not available through the Microstock+ Agent API yet. Don't offer or promise it; the user " +
@@ -164,16 +167,11 @@ const INSTRUCTIONS = [
     "with mplus_update_metadata or mplus_update_metadata_batch. Run every batch with dry_run=true first, show the user what",
     "will change, then repeat it with dry_run=false. Pass if_match_metaver so a newer edit is never overwritten; after a",
     "metadata_conflict, re-read the file and merge.",
-    PREVIEW_TOOLS
-        ? "Ask the user before queueing uploads (mplus_set_status with status queued) and before anything paid: get a quote with " +
-          "mplus_quote_ai_keywording, tell the user the exact price, and call mplus_run_ai_keywording only after they confirm that amount."
-        : "Changing statuses, sending files to stock agencies (upload and submit) and Microstock+ AI keywording are not " +
-          "available through these tools yet: don't offer or promise them; the user does them in the Microstock+ web interface (My Files).",
+    "Use mplus_initialize_upload to obtain a short-lived upload ticket, then transfer the user's local binary directly to its upload_url. " +
+        "Never ask Microstock+ to download an arbitrary remote URL. With status:write, mplus_set_status changes ready/ignored/queued; queued requires explicit user confirmation. Paid Microstock+ AI actions are outside this release.",
     "Nothing can be deleted with these tools. If the user asks to delete files, folders or anything else, say that deleting",
     "is done by hand in the Microstock+ web interface (My Files), and never claim that something was deleted.",
-    PREVIEW_TOOLS
-        ? "Use mplus_wait_for_events to follow uploads, reviews and AI jobs and report progress."
-        : "Use mplus_wait_for_events to follow the changes made through the Agent API (metadata updates and exports)."
+    "Use mplus_wait_for_events to follow metadata, upload and export events."
 ].join(" ");
 
 const KEY_SETUP_HINT = [
@@ -1112,6 +1110,44 @@ const EXPORT_OUTPUT = {
     },
     required: ["download_url"]
 };
+const UPLOAD_OUTPUT = {
+    type: "object",
+    properties: {
+        object: T.string,
+        file_id: T.string,
+        filename: T.string,
+        directory: T.string,
+        size_bytes: T.integer,
+        content_type: T.string,
+        expires_at: T.nullableString,
+        upload: {
+            type: "object",
+            properties: {
+                strategy: T.string,
+                chunk_size_bytes: T.integer,
+                chunk_count: T.integer,
+                uploaded_chunks: { type: "array", items: T.integer },
+                chunk: {
+                    type: "object",
+                    properties: {
+                        url: T.string,
+                        method: T.string,
+                        form_fields: { type: "object", additionalProperties: T.string },
+                        file_field: T.string
+                    },
+                    required: ["url", "method", "file_field"]
+                },
+                finish: {
+                    type: "object",
+                    properties: { url: T.string, method: T.string, form_fields: { type: "object", additionalProperties: T.string } },
+                    required: ["url", "method", "form_fields"]
+                }
+            },
+            required: ["chunk", "finish"]
+        }
+    },
+    required: ["object", "file_id", "upload", "expires_at"]
+};
 const QUOTE_OUTPUT = {
     type: "object",
     properties: {
@@ -1368,7 +1404,7 @@ async function getAccount(args, ctx) {
         `Connected agencies: ${agencyList}.`,
         can.length ? `This key can ${can.join(", ")}.` : "",
         cannot.length ? `It cannot ${cannot.join(", ")}.` : "",
-        PREVIEW_TOOLS ? "" : "Not available through the Agent API yet: status changes and sending files to agencies, and AI keywording; don't offer them.",
+        PREVIEW_TOOLS ? "" : "Paid Microstock+ AI keywording is outside this Agent API release; don't offer it.",
         "Nothing can be deleted through the API."
     ].filter(Boolean).join(" ");
     const lines = [
@@ -1593,7 +1629,7 @@ async function setStatus(args, ctx) {
             "ask for explicit approval, then call again with user_confirmed=true."
         );
     }
-    const body = { iids: args.iids, agencies: args.agencies, status: args.status };
+    const body = { iids: args.iids, agency: args.agency, status: args.status, user_confirmed: args.user_confirmed === true };
     const { data } = await ctx.api.request("POST", "/files/status:batch", { body, idempotencyKey: randomUUID(), signal: ctx.signal });
     const results = arrayOf(data.results);
     const failed = results.filter(result => !result.ok);
@@ -1607,6 +1643,16 @@ async function setStatus(args, ctx) {
         ? `ok   ${result.iid} · ${result.agency}: ${result.previous_status || "?"} → ${result.status || args.status}`
         : `FAIL ${result.iid} · ${result.agency || "?"} · ${result.error?.code || "error"}: ${oneLine(result.error?.message)}`)).join("\n");
     return { data, summary, text };
+}
+
+async function createFolder(args, ctx) {
+    const { data } = await ctx.api.request("POST", "/folders", {
+        body: { directory: args.directory },
+        idempotencyKey: randomUUID(),
+        signal: ctx.signal
+    });
+    const summary = `Created Microstock+ folder ${data.path || data.directory || args.directory}. Nothing was uploaded or deleted.`;
+    return { data, summary, text: `Folder: ${data.path || data.directory || args.directory}` };
 }
 
 async function fetchCsv(ctx, exportObject) {
@@ -1641,6 +1687,27 @@ async function exportCsv(args, ctx) {
         ? `Download: ${data.download_url}\n\n${inline.csv}`
         : `Download: ${data.download_url}`;
     return { data, summary: parts.join(" "), text };
+}
+
+async function initializeUpload(args, ctx) {
+    const body = {
+        filename: args.filename,
+        size_bytes: args.size_bytes,
+        content_type: args.content_type,
+        directory: args.directory
+    };
+    const { data } = await ctx.api.request("POST", "/uploads/init", {
+        body,
+        idempotencyKey: randomUUID(),
+        signal: ctx.signal
+    });
+    const chunk = data.upload?.chunk || {};
+    const summary = [
+        `Upload ticket ready for ${data.filename || args.filename} in ${data.directory || args.directory}.`,
+        `Upload every missing chunk index from 0 to ${(data.upload?.chunk_count ?? 1) - 1} directly to the ticket's chunk URL with ${chunk.method || "POST"}, replacing {chunk_number} in form_fields and using binary field ${chunk.file_field || "chunk"}; then call upload.finish with its form_fields.`,
+        `The ticket expires at ${data.expires_at || "the time returned by Microstock+"}. Never send a remote source URL.`
+    ].join(" ");
+    return { data, summary, text: `File id: ${data.file_id || "?"}\nChunks: ${data.upload?.chunk_count ?? "?"} × ${data.upload?.chunk_size_bytes ?? "?"} bytes\nChunk: ${chunk.method || "POST"} ${chunk.url || "?"}\nFinish: ${data.upload?.finish?.method || "POST"} ${data.upload?.finish?.url || "?"}` };
 }
 
 async function quoteAiKeywording(args, ctx) {
@@ -1941,7 +2008,6 @@ const TOOLS = [
         name: "mplus_set_status",
         title: "Set agency status (queue uploads)",
         scope: "status:write",
-        feature: "status_changes",
         description: [
             `Set the per-agency status of up to ${BATCH_MAX_ITEMS} files: ready (prepared, not sent), queued (send to the agency: upload`,
             "and submit) or ignored (never send to that agency). Queueing sends the user's files to external stock agencies, so",
@@ -1954,26 +2020,61 @@ const TOOLS = [
             type: "object",
             properties: {
                 iids: iidList(BATCH_MAX_ITEMS, "Files to change."),
-                agencies: {
-                    type: "array",
-                    items: AGENCY_ID_SCHEMA,
-                    minItems: 1,
-                    maxItems: 30,
-                    uniqueItems: true,
-                    description: "Agency ids from mplus_get_account."
-                },
+                agency: AGENCY_ID_SCHEMA,
                 status: { type: "string", enum: SETTABLE_STATUSES, description: "ready, queued (upload and submit) or ignored." },
                 user_confirmed: {
                     type: "boolean",
-                    description: "Required true for queued: the user explicitly approved sending these files to these agencies."
+                    description: "Required true for queued: the user explicitly approved sending these files to this agency."
                 }
             },
-            required: ["iids", "agencies", "status"],
+            required: ["iids", "agency", "status"],
             additionalProperties: false
         },
         outputSchema: withSummary(STATUS_BATCH_OUTPUT),
         annotations: writeAnnotations("Set agency status (queue uploads)", { openWorld: true }),
         handler: setStatus
+    },
+    {
+        name: "mplus_create_folder",
+        title: "Create a Microstock+ folder",
+        scope: "files:upload",
+        description: [
+            "Create one folder in the key owner's Microstock+ portfolio so local files can be uploaded into it.",
+            "Pass the complete directory path beginning with /. This cannot delete, rename or overwrite a folder or file."
+        ].join(" "),
+        inputSchema: {
+            type: "object",
+            properties: { directory: FOLDER_PATH_SCHEMA },
+            required: ["directory"],
+            additionalProperties: false
+        },
+        outputSchema: withSummary(FOLDER_OUTPUT),
+        annotations: writeAnnotations("Create a Microstock+ folder"),
+        handler: createFolder
+    },
+    {
+        name: "mplus_initialize_upload",
+        title: "Initialize a Microstock+ file upload",
+        scope: "files:upload",
+        description: [
+            "Create a short-lived upload ticket for one local file. The named Microstock+ directory must already exist.",
+            "After this call, transfer the local binary directly to upload.chunk.url with the returned method, form_fields and file_field,",
+            "then call upload.finish. This tool never accepts or fetches a remote URL, and it cannot delete or replace an existing file."
+        ].join(" "),
+        inputSchema: {
+            type: "object",
+            properties: {
+                filename: { type: "string", minLength: 1, maxLength: 255, pattern: "^[^/\\\\]+$", description: "File name only, without a path." },
+                size_bytes: { type: "integer", minimum: 1, maximum: UPLOAD_MAX_BYTES, description: "Exact local file size in bytes." },
+                content_type: { type: "string", minLength: 3, maxLength: 200, pattern: "^[^\\s/]+/[^\\s/]+$", description: "MIME type such as image/jpeg, image/png, application/zip or video/mp4." },
+                directory: FOLDER_PATH_SCHEMA
+            },
+            required: ["filename", "size_bytes", "content_type", "directory"],
+            additionalProperties: false
+        },
+        outputSchema: withSummary(UPLOAD_OUTPUT),
+        annotations: writeAnnotations("Initialize a Microstock+ file upload", { openWorld: true }),
+        handler: initializeUpload
     },
     {
         name: "mplus_export_csv",
@@ -2140,6 +2241,32 @@ const TOOLS = [
 const TOOL_INDEX = new Map(TOOLS.map(tool => [tool.name, tool]));
 // Tools of features the Agent API does not offer yet stay out of tools/list unless MPLUS_ENABLE_PREVIEW_TOOLS=1.
 const OFFERED_TOOLS = PREVIEW_TOOLS ? TOOLS : TOOLS.filter(tool => !tool.feature);
+
+const TOOL_API_ROUTES = Object.freeze({
+    mplus_get_account: { method: "GET", path: "/me" },
+    mplus_list_folders: { method: "GET", path: "/folders" },
+    mplus_list_files: { method: "GET", path: "/files" },
+    mplus_get_file: { method: "GET", path: "/files/{iid}" },
+    mplus_update_metadata: { method: "PATCH", path: "/files/{iid}/metadata" },
+    mplus_update_metadata_batch: { method: "POST", path: "/files/metadata:batch" },
+    mplus_set_status: { method: "POST", path: "/files/status:batch" },
+    mplus_create_folder: { method: "POST", path: "/folders" },
+    mplus_initialize_upload: { method: "POST", path: "/uploads/init" },
+    mplus_export_csv: { method: "POST", path: "/exports/csv" },
+    mplus_wait_for_events: { method: "GET", path: "/events" }
+});
+
+function portableToolCatalogue() {
+    return {
+        schema_version: "1",
+        server: SERVER_INFO,
+        tools: TOOLS.filter(tool => !tool.feature).map(({ handler, feature, alwaysListed, scope, ...definition }) => ({
+            ...definition,
+            scope,
+            api: TOOL_API_ROUTES[definition.name]
+        }))
+    };
+}
 
 function visibleTools(scopes) {
     if (!scopes) return OFFERED_TOOLS;
@@ -2631,6 +2758,7 @@ const HELP_TEXT = `${SERVER_TITLE} MCP server ${SERVER_VERSION}
 Usage:
   node mplus-mcp.mjs              Serve MCP over stdio (Claude Code, Claude Desktop, Cursor, Codex, ...)
   node mplus-mcp.mjs --http PORT  Serve MCP over Streamable HTTP at http://127.0.0.1:PORT/mcp
+  node mplus-mcp.mjs --dump-tools Print the portable remote-gateway tool catalogue as JSON
   node mplus-mcp.mjs --version | --help
 
 Environment:
@@ -2638,12 +2766,6 @@ Environment:
                    Create one at ${KEYS_PAGE_URL} (section "Agent keys").
   MPLUS_API_BASE   Agent API base URL. Default ${DEFAULT_API_BASE}
   MPLUS_MCP_DEBUG  1 logs every API request (method, path, status) to stderr.
-  MPLUS_ENABLE_PREVIEW_TOOLS
-                   1 also offers mplus_set_status, mplus_quote_ai_keywording,
-                   mplus_run_ai_keywording and mplus_get_job. The Agent API does not
-                   offer status changes or AI keywording yet; without this setting
-                   those tools are hidden and answer "not available yet".
-
 In HTTP mode each request sends its own key as "Authorization: Bearer mpk_live_...".
 Nothing can be deleted through this server; deleting is done in the Microstock+ web interface.
 `;
@@ -2654,6 +2776,7 @@ function parseArgs(argv) {
         const arg = argv[index];
         if (arg === "--help" || arg === "-h") options.help = true;
         else if (arg === "--version" || arg === "-v") options.version = true;
+        else if (arg === "--dump-tools") options.dumpTools = true;
         else if (arg === "--http") {
             const port = Number(argv[index + 1]);
             if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error("--http needs a port number (0-65535).");
@@ -2689,6 +2812,10 @@ function main(argv) {
     }
     if (options.version) {
         process.stdout.write(`${SERVER_VERSION}\n`);
+        return;
+    }
+    if (options.dumpTools) {
+        process.stdout.write(`${JSON.stringify(portableToolCatalogue(), null, 2)}\n`);
         return;
     }
     const config = readConfig(process.env);

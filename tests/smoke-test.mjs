@@ -29,16 +29,16 @@ const IID = {
     aiCity: "6abc74e948864d403ea0c566"
 };
 const EXPECTED_TOOLS = [
-    "mplus_export_csv", "mplus_get_account", "mplus_get_file", "mplus_get_job", "mplus_list_files", "mplus_list_folders",
+    "mplus_create_folder", "mplus_export_csv", "mplus_get_account", "mplus_get_file", "mplus_get_job", "mplus_initialize_upload", "mplus_list_files", "mplus_list_folders",
     "mplus_quote_ai_keywording", "mplus_run_ai_keywording", "mplus_set_status", "mplus_update_metadata",
     "mplus_update_metadata_batch", "mplus_wait_for_events"
 ];
-const WRITE_TOOLS = ["mplus_update_metadata", "mplus_update_metadata_batch", "mplus_set_status"];
+const WRITE_TOOLS = ["mplus_create_folder", "mplus_update_metadata", "mplus_update_metadata_batch", "mplus_initialize_upload", "mplus_set_status"];
 // Tools of features the shipping Agent API keeps switched off: offered only with MPLUS_ENABLE_PREVIEW_TOOLS=1.
-const PREVIEW_TOOLS = ["mplus_get_job", "mplus_quote_ai_keywording", "mplus_run_ai_keywording", "mplus_set_status"];
+const PREVIEW_TOOLS = ["mplus_get_job", "mplus_quote_ai_keywording", "mplus_run_ai_keywording"];
 const AVAILABLE_TOOLS = EXPECTED_TOOLS.filter(name => !PREVIEW_TOOLS.includes(name));
 const PREVIEW = { MPLUS_ENABLE_PREVIEW_TOOLS: "1" };
-const DISABLED_FEATURES = ["status_changes", "ai_keywording", "event_stream"];
+const DISABLED_FEATURES = ["ai_keywording", "event_stream"];
 
 let checks = 0;
 const clients = [];
@@ -395,24 +395,29 @@ async function legacySuite(mock, pluginVersion) {
     await check("mplus_set_status: queueing needs user_confirmed; per file/agency results (nosubmissions)", async () => {
         const before = mock.requests.filter(entry => entry.path.endsWith("/files/status:batch")).length;
         expectToolError(await callTool(client, "mplus_set_status", {
-            iids: [IID.maple44], agencies: ["shutterstock"], status: "queued"
+            iids: [IID.maple44], agency: "shutterstock", status: "queued"
         }), /Not queued.*user_confirmed=true/, "unconfirmed queue");
         assert.equal(mock.requests.filter(entry => entry.path.endsWith("/files/status:batch")).length, before, "nothing may be sent without confirmation");
 
         const queued = expectOk(await callTool(client, "mplus_set_status", {
-            iids: [IID.maple44], agencies: ["shutterstock", "pond5"], status: "queued", user_confirmed: true
+            iids: [IID.maple44], agency: "shutterstock", status: "queued", user_confirmed: true
         }), "queue");
         assert.equal(queued.succeeded, 1);
-        assert.equal(queued.results.find(result => result.agency === "shutterstock").previous_status, "ready");
-        assert.equal(queued.results.find(result => result.agency === "pond5").error.code, "nosubmissions");
-        assert.match(queued.summary, /nosubmissions on pond5/);
+        assert.equal(queued.results[0].previous_status, "ready");
+        const pond5 = expectOk(await callTool(client, "mplus_set_status", {
+            iids: [IID.maple44], agency: "pond5", status: "queued", user_confirmed: true
+        }), "pond5 queue");
+        assert.equal(pond5.results[0].error.code, "nosubmissions");
 
         const ignored = expectOk(await callTool(client, "mplus_set_status", {
-            iids: [IID.icons], agencies: ["adobestock", "dreamstime"], status: "ignored"
+            iids: [IID.icons], agency: "adobestock", status: "ignored"
         }), "ignore");
-        assert.equal(ignored.results.find(result => result.agency === "adobestock").status, "ignored");
-        assert.equal(ignored.results.find(result => result.agency === "dreamstime").error.code, "agency_not_connected");
-        expectOk(await callTool(client, "mplus_set_status", { iids: [IID.icons], agencies: ["adobestock"], status: "ready" }), "back to ready");
+        assert.equal(ignored.results[0].status, "ignored");
+        const disconnected = expectOk(await callTool(client, "mplus_set_status", {
+            iids: [IID.icons], agency: "dreamstime", status: "ignored"
+        }), "ignore disconnected");
+        assert.equal(disconnected.results[0].error.code, "agency_not_connected");
+        expectOk(await callTool(client, "mplus_set_status", { iids: [IID.icons], agency: "adobestock", status: "ready" }), "back to ready");
     });
 
     await check("mplus_wait_for_events: recent events, then the upload pipeline by cursor", async () => {
@@ -495,6 +500,36 @@ async function legacySuite(mock, pluginVersion) {
         assert.equal(alamy.csv, undefined);
         expectToolError(await callTool(client, "mplus_export_csv", { iids: [IID.icons], folder: "/vector" }), /either iids or folder/, "iids and folder");
         expectToolError(await callTool(client, "mplus_export_csv", { folder: "/nope" }), /404, folder_not_found/, "unknown folder");
+    });
+
+    await check("mplus_initialize_upload: returns a direct binary-transfer ticket and accepts no remote URL", async () => {
+        const ticket = expectOk(await callTool(client, "mplus_initialize_upload", {
+            filename: "fresh-image.jpg",
+            size_bytes: 123456,
+            content_type: "image/jpeg",
+            directory: "/foto/2026"
+        }), "initialize upload");
+        assert.equal(ticket.object, "upload_ticket");
+        assert.equal(ticket.upload.chunk.method, "POST");
+        assert.equal(ticket.upload.chunk.file_field, "chunk");
+        assert.equal(ticket.upload.chunk.form_fields.chunkNumber, "{chunk_number}");
+        assert.ok(ticket.upload.chunk.url.startsWith(mock.baseUrl));
+        assert.ok(ticket.upload.finish.url.startsWith(mock.baseUrl));
+        expectToolError(await callTool(client, "mplus_initialize_upload", {
+            filename: "fresh-image.jpg", size_bytes: 123456, content_type: "image/jpeg", directory: "/foto/2026",
+            source_url: "https://example.test/file.jpg"
+        }), /unknown field "source_url"/, "remote URL refused by schema");
+        expectToolError(await callTool(client, "mplus_initialize_upload", {
+            filename: "fresh-image.jpg", size_bytes: 123456, content_type: "image/jpeg", directory: "/missing"
+        }), /folder_not_found/, "missing upload directory");
+    });
+
+    await check("mplus_create_folder: creates an owner folder for uploads and refuses missing parents", async () => {
+        const folder = expectOk(await callTool(client, "mplus_create_folder", { directory: "/foto/2026/agent-upload" }), "create folder");
+        assert.equal(folder.path, "/foto/2026/agent-upload");
+        const listed = expectOk(await callTool(client, "mplus_list_folders", { path: "/foto/2026", recursive: true }), "list created folder");
+        assert.ok(listed.data.some(item => item.path === "/foto/2026/agent-upload"));
+        expectToolError(await callTool(client, "mplus_create_folder", { directory: "/missing/child" }), /folder_not_found/, "missing parent");
     });
 
     await check("429: one retry after Retry-After; a second 429 or a long wait becomes a tool error", async () => {
@@ -597,7 +632,7 @@ async function modernSuite(mock) {
         assert.equal(result.cacheScope, "private");
         assert.ok(result.ttlMs > 0);
         const names = result.tools.map(tool => tool.name);
-        assert.equal(names.length, 11);
+        assert.equal(names.length, 13);
         assert.ok(!names.includes("mplus_run_ai_keywording"));
         assert.ok(result.tools.every(tool => tool.outputSchema));
     });
@@ -783,21 +818,22 @@ async function httpSuite(mock) {
 
 async function availabilitySuite(mock) {
     const callArgs = {
-        mplus_set_status: { iids: [IID.icons], agencies: ["adobestock"], status: "ready" },
+        mplus_set_status: { iids: [IID.icons], agency: "adobestock", status: "ready" },
         mplus_quote_ai_keywording: { iids: [IID.drone], mode: "skip" },
         mplus_run_ai_keywording: { quote_id: "q_any", confirm_charge_eur: 1 },
         mplus_get_job: { job_id: "job_any" }
     };
     const refusals = {};
 
-    await check("default: status changes and AI keywording tools are not offered, even to a key with every scope", async () => {
+    await check("default: scoped statuses are offered while paid AI tools stay hidden", async () => {
         const { client, init } = await legacyClient("default-full", { MPLUS_API_BASE: mock.baseUrl, MPLUS_API_KEY: mock.keys.full });
         const { result } = await client.request("tools/list", {});
         assert.deepEqual(result.tools.map(tool => tool.name).sort(), AVAILABLE_TOOLS);
-        assert.match(init.instructions, /not available through these tools yet: don't offer or promise them/);
+        assert.match(init.instructions, /Paid Microstock\+ AI actions are outside this release/);
+        assert.ok(result.tools.some(tool => tool.name === "mplus_set_status"));
         for (const name of PREVIEW_TOOLS) assert.ok(!init.instructions.includes(name), `instructions mention ${name}`);
         const events = result.tools.find(tool => tool.name === "mplus_wait_for_events");
-        assert.match(events.description, /upload, submission and review events are not reported yet/);
+        assert.match(events.description, /confirm what changed and to report progress/);
         assert.doesNotMatch(events.description, /AI quotes and jobs/);
         await client.close();
     });
@@ -816,15 +852,16 @@ async function availabilitySuite(mock) {
         await client.close();
     });
 
-    await check("default: the account summary says what is not available yet; a null balance is fine", async () => {
+    await check("default: account summary exposes scoped statuses and excludes paid AI; a null balance is fine", async () => {
         mock.control.setBalance(null);
         try {
             const { client } = await legacyClient("default-account", { MPLUS_API_BASE: mock.baseUrl, MPLUS_API_KEY: mock.keys.standard });
             const account = expectOk(await callTool(client, "mplus_get_account"), "mplus_get_account");
             assert.equal(account.balance_eur, null);
             assert.doesNotMatch(account.summary, /balance/);
-            assert.match(account.summary, /Not available through the Agent API yet: status changes and sending files to agencies, and AI keywording/);
-            assert.doesNotMatch(account.summary, /set statuses and queue uploads|quote AI keywording/);
+            assert.match(account.summary, /set statuses and queue uploads/);
+            assert.match(account.summary, /Paid Microstock\+ AI keywording is outside/);
+            assert.doesNotMatch(account.summary, /quote AI keywording/);
             await client.close();
         } finally {
             mock.control.setBalance(25);
@@ -837,7 +874,7 @@ async function availabilitySuite(mock) {
             const { client } = await legacyClient("preview-mvp", { MPLUS_API_BASE: mvp.baseUrl, MPLUS_API_KEY: mvp.keys.full, ...PREVIEW });
             const { result } = await client.request("tools/list", {});
             assert.deepEqual(result.tools.map(tool => tool.name).sort(), EXPECTED_TOOLS);
-            for (const name of ["mplus_set_status", "mplus_quote_ai_keywording", "mplus_get_job"]) {
+            for (const name of ["mplus_quote_ai_keywording", "mplus_get_job"]) {
                 const before = mvp.requests.length;
                 const answer = await callTool(client, name, callArgs[name]);
                 expectToolError(answer, /^Not available yet \(not_available_yet\): /, name);
@@ -845,7 +882,7 @@ async function availabilitySuite(mock) {
                 assert.equal(mvp.requests.length, before + 1, `${name} asks the API once`);
                 assert.equal(mvp.requests.at(-1).status, 403);
             }
-            assert.match(client.stderr, /mplus_set_status: 403 endpoint_disabled/);
+            assert.doesNotMatch(client.stderr, /mplus_set_status: 403 endpoint_disabled/);
             expectOk(await callTool(client, "mplus_update_metadata_batch", {
                 items: [{ iid: IID.icons, patch: { notes: "checked" } }], dry_run: true
             }), "metadata still works");
@@ -868,18 +905,21 @@ async function availabilitySuite(mock) {
 }
 
 async function packagingSuite(pluginManifest) {
-    await check("plugin packaging: manifest, userConfig, .mcp.json, marketplace, skills and commands", async () => {
+    await check("plugin packaging: remote OAuth MCP, portable manifests, marketplace, skills and commands", async () => {
         assert.equal(pluginManifest.name, "microstock-plus");
         assert.equal(pluginManifest.displayName, "Microstock+");
         assert.equal(pluginManifest.license, "MIT");
-        const option = pluginManifest.userConfig.api_key;
-        assert.equal(option.type, "string");
-        assert.equal(option.sensitive, true);
-        assert.ok(option.title && option.description.includes("https://microstock.plus/ai-agent-skills"));
+        assert.equal(pluginManifest.userConfig, undefined);
         const mcp = readJson(".mcp.json").mcpServers["microstock-plus"];
-        assert.equal(mcp.command, "node");
-        assert.deepEqual(mcp.args, ["${CLAUDE_PLUGIN_ROOT}/server/mplus-mcp.mjs"]);
-        assert.equal(mcp.env.MPLUS_API_KEY, "${user_config.api_key}");
+        assert.equal(mcp.type, "http");
+        assert.equal(mcp.url, "https://microstock.plus/mcp");
+        const portable = readJson("plugin.json");
+        assert.equal(portable.version, pluginManifest.version);
+        assert.equal(readJson("mcp.json").mcpServers["microstock-plus"].url, "https://microstock.plus/mcp");
+        const catalogue = readJson("server", "tools.json");
+        assert.equal(catalogue.length, 11);
+        assert.deepEqual(catalogue.map(tool => tool.name).sort(), AVAILABLE_TOOLS);
+        assert.ok(catalogue.every(tool => tool.scope && tool.api?.method && tool.api?.path));
         const marketplace = readJson(".claude-plugin", "marketplace.json");
         assert.equal(marketplace.name, "microstock-plus");
         assert.equal(marketplace.plugins[0].source, "./");
@@ -896,9 +936,9 @@ async function packagingSuite(pluginManifest) {
         const spec = readJson("openapi", "agent-api-v1.json");
         assert.equal(spec.openapi, "3.1.0");
         const expected = {
-            "/me": ["get"], "/folders": ["get"], "/files": ["get"], "/files/{iid}": ["get", "delete"],
+            "/me": ["get"], "/folders": ["get", "post"], "/files": ["get"], "/files/{iid}": ["get", "delete"],
             "/files/{iid}/metadata": ["patch"], "/files/metadata:batch": ["post"], "/files/status:batch": ["post"],
-            "/exports/csv": ["post"], "/exports/{id}/download": ["get"], "/ai/keywording:quote": ["post"],
+            "/uploads/init": ["post"], "/exports/csv": ["post"], "/exports/{id}/download": ["get"], "/ai/keywording:quote": ["post"],
             "/ai/keywording:run": ["post"], "/jobs/{id}": ["get"], "/events": ["get"], "/events/stream": ["get"]
         };
         for (const [route, methods] of Object.entries(expected)) {
