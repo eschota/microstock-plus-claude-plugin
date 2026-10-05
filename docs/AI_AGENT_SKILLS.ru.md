@@ -83,13 +83,14 @@ Microstock+. Публикация в общем каталоге требует 
 
 Платные AI-инструменты не входят в опубликованный каталог MCP. Опциональная смена статусов появляется только когда её разрешают production API и скоупы ключа.
 
-**Claude Code с плагином.** Плагин `microstock-plus` включает сервер, два навыка и три команды и хранит ключ в защищённом хранилище системы. После того как добавлен маркетплейс с плагином:
+**Claude Code с GitHub-плагином.** Плагин `microstock-plus` содержит два навыка, три команды и облачный OAuth MCP. Копировать агентский ключ не нужно. Установите его из публичного GitHub-маркетплейса:
 
 ```bash
+claude plugin marketplace add eschota/microstock-plus-claude-plugin
 claude plugin install microstock-plus@microstock-plus
 ```
 
-Claude Code спросит ключ при включении плагина; сменить его можно командой `/plugin configure microstock-plus@microstock-plus`.
+GitHub-маркетплейс уже доступен. Включение в официальный каталог Claude или OpenAI требует отдельной модерации и здесь не заявляется.
 
 **Claude Code, только сервер.** Ключ сохранится в конфигурационном файле Claude Code:
 
@@ -163,16 +164,14 @@ curl -s https://microstock.plus/api/agent/v1/me -H "Authorization: Bearer $MPLUS
 | `mplus_get_file` | `GET /files/{iid}` | `files:read` | Один файл: вся атрибуция, metaver, статусы, валидация |
 | `mplus_update_metadata` | `PATCH /files/{iid}/metadata` | `metadata:write` | Правка атрибуции одного файла (merge patch) |
 | `mplus_update_metadata_batch` | `POST /files/metadata:batch` | `metadata:write` | Батч до 100 правок, результат по каждой, `dry_run` |
+| `mplus_initialize_upload` | `POST /uploads/init` | `files:upload` | Инициализировать прямую multipart-загрузку локального файла |
 | `mplus_set_status` | `POST /files/status:batch` | `status:write` | `ready`, `queued` или `ignored` для одного стока; `queued` требует подтверждения |
 | `mplus_create_folder` | `POST /folders` | `files:upload` | Создать папку внутри существующей родительской папки |
 | `mplus_export_csv` | `POST /exports/csv` | `csv:export` | Выгрузка CSV (бесплатные форматы) |
-| `mplus_quote_ai_keywording` | `POST /ai/keywording:quote` | `ai:quote` | **Пока недоступно**: расчёт цены ИИ-атрибуции |
-| `mplus_run_ai_keywording` | `POST /ai/keywording:run` | `ai:run` | **Пока недоступно**: запуск по расчёту, платно |
-| `mplus_get_job` | `GET /jobs/{id}` | `files:read` | **Пока недоступно**: прогресс ИИ-задачи |
 | `mplus_wait_for_events` | `GET /events` | `events:read` | Long poll ленты событий (до 25 с) |
 | — | `GET /events/stream` | `events:read` | **Пока недоступно**: Server-Sent Events |
 
-Начинайте сессию с `mplus_get_account` (`GET /me`): он покажет подключённые стоки, их id и что разрешено ключу. Если ключ может читать аккаунт, MCP-сервер показывает только инструменты, разрешённые его скоупами; четыре инструмента с пометкой «пока недоступно» в этом релизе не предлагаются вовсе.
+Начинайте сессию с `mplus_get_account` (`GET /me`): он покажет подключённые стоки, их id и что разрешено ключу. MCP-сервер показывает только инструменты, разрешённые скоупами ключа. Платные AI-инструменты не предлагаются.
 
 ## Сценарии
 
@@ -249,9 +248,9 @@ curl -s -X POST https://microstock.plus/api/agent/v1/files/metadata:batch \
                  "keywords": {"add": ["golden", "fall", "trees", "aerial"]}}}]}'
 ```
 
-### D. Статусы и загрузка (пока недоступно)
+### D. Статусы и загрузка
 
-Читать статусы можно: `mplus_list_files` с `agency` и `status` (например, все файлы со статусом `rejected` на Adobe Stock) и `mplus_get_file` для одного файла — с `rejection_reasons`, если сток назвал причину. Менять их пока нельзя: `POST /files/status:batch` отвечает `403 endpoint_disabled`, ключам нельзя выдать `status:write`, а MCP-сервер не предлагает `mplus_set_status`. Не предлагайте и не обещайте ставить `ready`, `queued` (отправить на сток: загрузка и сабмит) или `ignored`. Когда файлы готовы, скажите пользователю, какие файлы и на какие стоки вы советуете отправить, — отправит он сам из «Моих файлов».
+Читайте статусы через `mplus_list_files` и `mplus_get_file`. Со скоупом `status:write` инструмент `mplus_set_status` меняет `ready`, `ignored` или `queued` для одного стока. `queued` отправляет файлы на этот сток: покажите точные файлы и сток, получите явное подтверждение и передайте `user_confirmed: true`. Не назначайте вручную промежуточные или итоговые статусы. Для нового локального файла создайте отсутствующую папку через `mplus_create_folder`, вызовите `mplus_initialize_upload`, отправьте все недостающие чанки и вызовите возвращённый finish endpoint. URL удалённого источника передавать нельзя.
 
 ### E. Выгрузка CSV
 

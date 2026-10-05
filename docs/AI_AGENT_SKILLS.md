@@ -55,7 +55,6 @@ With an agent key you work **as the user, with less power than the user**. You c
 | `account:read` | `GET /me` | on |
 | `files:read` | folders, files, file details and validation | on |
 | `metadata:write` | metadata patch and batch | on |
-| `files:upload` | direct local-file upload into an existing folder | on |
 | `csv:export` | free CSV exports | on |
 | `events:read` | event feed (long poll) | on |
 | `status:write` | status batch (`ready`, `queued`, `ignored`) | opt-in |
@@ -84,13 +83,14 @@ package is for direct connection and testing until that approval occurs.
 
 Paid AI tools are not part of the published MCP catalogue. Optional status tools appear only when enabled by the production API and key scopes.
 
-**Claude Code, with the plugin.** The `microstock-plus` plugin bundles the server, two skills and three commands, and keeps the key in the system's secure credential store. After you add the marketplace that hosts the plugin:
+**Claude Code, with the GitHub plugin.** The `microstock-plus` plugin bundles two skills, three commands and the hosted OAuth MCP. It needs no copied agent key. Install it from the public GitHub marketplace:
 
 ```bash
+claude plugin marketplace add eschota/microstock-plus-claude-plugin
 claude plugin install microstock-plus@microstock-plus
 ```
 
-Claude Code asks for the key when the plugin is enabled; change it later with `/plugin configure microstock-plus@microstock-plus`.
+The GitHub marketplace is available now. Inclusion in the official Claude or OpenAI plugin directory is subject to separate moderation and is not claimed.
 
 **Claude Code, server only.** This stores the key in Claude Code's configuration file:
 

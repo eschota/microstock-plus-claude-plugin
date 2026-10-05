@@ -39,8 +39,8 @@ the MCP server, the Claude plugin, and the public "AI Agent Skills" page.
 | `account:read` | `GET /me` | on |
 | `files:read` | folders, files, file details, validation | on |
 | `metadata:write` | metadata patch / batch | on |
-| `status:write` | status batch (`ready`, `queued`, `ignored`) | on |
-| `files:upload` | initialize a direct upload into an existing folder | on |
+| `status:write` | status batch (`ready`, `queued`, `ignored`) | opt-in |
+| `files:upload` | create folders and initialize direct uploads | opt-in |
 | `csv:export` | free CSV exports | on |
 | `events:read` | event feed / stream | on |
 | `ai:quote` | AI keywording price quote | on |
@@ -152,6 +152,7 @@ Event types: `file.metadata.updated`, `file.status.changed` (data: agency, from,
 |---|---|---|---|
 | GET | `/me` | account:read | account, plan, connected agencies, limits, key info |
 | GET | `/folders` | files:read | folder tree (`archive=false`) |
+| POST | `/folders` | files:upload | create one folder below an existing parent |
 | GET | `/files` | files:read | list/search files |
 | GET | `/files/{iid}` | files:read | one file with metadata, statuses, validation |
 | PATCH | `/files/{iid}/metadata` | metadata:write | merge-patch metadata of one file |

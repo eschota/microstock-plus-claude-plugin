@@ -58,11 +58,11 @@ Use the marketplace/plugin commands below only when you also want the packaged s
 Add the marketplace that hosts this plugin, then install it:
 
 ```bash
-claude plugin marketplace add <owner>/<repo>
+claude plugin marketplace add eschota/microstock-plus-claude-plugin
 claude plugin install microstock-plus@microstock-plus
 ```
 
-Replace `<owner>/<repo>` with the GitHub repository that contains this folder. To try a local copy for one session, run `claude --plugin-dir ./microstock-plus-agent-kit`.
+This installs the packaged skills and remote OAuth MCP from the [Microstock+ GitHub marketplace](https://github.com/eschota/microstock-plus-claude-plugin). The repository is public and installable now; listing in the official Claude or OpenAI directory still requires their separate moderation and is not claimed. To try a local checkout for one session, run `claude --plugin-dir ./microstock-plus-agent-kit`.
 
 The connector is a local MCP server, so it needs [Node.js](https://nodejs.org) 18 or newer. It uses only Node's built-in modules and installs no packages.
 
@@ -105,7 +105,7 @@ The server works with any MCP client: Cursor, OpenAI Codex CLI, and others. [doc
 ## Troubleshooting
 
 - **Claude says the Microstock+ tools aren't available.** In Claude Code, run `/mcp` and check that the `plugin:microstock-plus:microstock-plus` server is connected. If it failed to start, check that `node --version` prints 18 or newer in the terminal you start Claude from, then restart the session. In claude.ai chat and Cowork the server doesn't run; see [above](#claude-desktop-claudeai-and-cowork).
-- **"No Microstock+ agent key is configured".** Run `/plugin configure microstock-plus@microstock-plus` and enter your key, then restart the session. In Claude Code 2.1.285 or later, `claude plugin configure microstock-plus@microstock-plus` in a terminal shows whether the key is set.
+- **"No Microstock+ agent key is configured".** This applies only to the optional local stdio server. The GitHub plugin and hosted MCP use browser OAuth and do not need a pasted key.
 - **`invalid_api_key` or `revoked_api_key`.** The key was mistyped, rotated or revoked. Create a new one at [microstock.plus/ai-agent-skills](https://microstock.plus/ai-agent-skills) and enter it again.
 - **`scope_required`.** The key lacks a permission for that action. Create a key with the scope you need.
 - **"Not available yet".** Status changes and AI keywording aren't in the Agent API yet; the tools say so instead of trying.

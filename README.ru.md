@@ -58,11 +58,11 @@ claude mcp add --transport http microstock-plus https://microstock.plus/mcp
 Добавьте маркетплейс, где лежит плагин, и установите его:
 
 ```bash
-claude plugin marketplace add <owner>/<repo>
+claude plugin marketplace add eschota/microstock-plus-claude-plugin
 claude plugin install microstock-plus@microstock-plus
 ```
 
-Вместо `<owner>/<repo>` укажите репозиторий GitHub с этой папкой. Чтобы попробовать локальную копию в одной сессии, запустите `claude --plugin-dir ./microstock-plus-agent-kit`.
+Так устанавливаются упакованные skills и удалённый OAuth MCP из [GitHub-маркетплейса Microstock+](https://github.com/eschota/microstock-plus-claude-plugin). Репозиторий уже публичный и устанавливается напрямую; публикация в официальных каталогах Claude или OpenAI требует отдельной модерации и здесь не заявляется. Для локальной проверки checkout в одной сессии запустите `claude --plugin-dir ./microstock-plus-agent-kit`.
 
 Коннектор — локальный MCP-сервер, ему нужен [Node.js](https://nodejs.org) 18 или новее. Он использует только встроенные модули Node и ничего не устанавливает.
 
@@ -106,7 +106,7 @@ claude plugin install microstock-plus@microstock-plus
 ## Если что-то не работает
 
 - **Claude говорит, что инструментов Microstock+ нет.** В Claude Code выполните `/mcp` и проверьте, что сервер `plugin:microstock-plus:microstock-plus` подключён. Если он не запустился, проверьте, что `node --version` в терминале, из которого вы запускаете Claude, показывает 18 или новее, и перезапустите сессию. В чате claude.ai и в Cowork сервер не запускается; см. [выше](#claude-desktop-claudeai-и-cowork).
-- **«No Microstock+ agent key is configured».** Выполните `/plugin configure microstock-plus@microstock-plus`, введите ключ и перезапустите сессию. В Claude Code 2.1.285 и новее команда `claude plugin configure microstock-plus@microstock-plus` в терминале покажет, задан ли ключ.
+- **«No Microstock+ agent key is configured».** Это относится только к опциональному локальному stdio-серверу. GitHub-плагин и облачный MCP используют OAuth в браузере и не требуют вставлять ключ.
 - **`invalid_api_key` или `revoked_api_key`.** Ключ введён с ошибкой, перевыпущен или отозван. Создайте новый на [microstock.plus/ai-agent-skills](https://microstock.plus/ai-agent-skills) и введите его снова.
 - **`scope_required`.** У ключа нет нужного разрешения. Создайте ключ с нужным скоупом.
 - **«Not available yet» (пока недоступно).** Смены статусов и ИИ-атрибуции в Agent API пока нет; инструменты так и отвечают, ничего не пробуя.
