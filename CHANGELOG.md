@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.1 - 2026-10-05
+
+- Prepared OpenAI directory metadata: verified existing public support/privacy/terms links, owner-source icons, three starter prompts, five positive and three negative review cases, and release notes.
+- Reviewer cases use only the dedicated `/MCPReview` fixture and discover file ids with `mplus_list_files`. The upload case initializes a ticket from explicit file facts and does not claim that ChatGPT transfers attachment bytes automatically.
+- Package version is 1.2.1; the unchanged MCP runtime remains 1.2.0.
+
 ## 1.2.0 - 2026-10-05
 
 - Added `mplus_initialize_upload` and `POST /uploads/init` for direct multipart upload of a local binary into an existing Microstock+ folder. The contract accepts no remote source URL and returns the native chunk and finish instructions unchanged.

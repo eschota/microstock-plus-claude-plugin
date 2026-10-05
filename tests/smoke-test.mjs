@@ -17,6 +17,7 @@ import { ALL_SCOPES, DEFAULT_SCOPES, startMockApi } from "./mock-api.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SERVER_PATH = path.join(ROOT, "server", "mplus-mcp.mjs");
+const RUNTIME_VERSION = "1.2.0";
 const MODERN = "2026-07-28";
 const IID = {
     leaves42: "6abc74e948864d403ea0c559",
@@ -216,13 +217,13 @@ async function waitFor(condition, what, timeoutMs = 5000) {
 
 // ---------------------------------------------------------------------------
 
-async function legacySuite(mock, pluginVersion) {
+async function legacySuite(mock, runtimeVersion) {
     const { client, init } = await legacyClient("full-key", { MPLUS_API_BASE: mock.baseUrl, MPLUS_API_KEY: mock.keys.full, ...PREVIEW });
 
     await check("initialize (2025-11-25): version, identity, capabilities, instructions", async () => {
         assert.equal(init.protocolVersion, "2025-11-25");
         assert.equal(init.serverInfo.name, "microstock-plus");
-        assert.equal(init.serverInfo.version, pluginVersion, "server version must match plugin.json");
+        assert.equal(init.serverInfo.version, runtimeVersion, "server runtime version");
         assert.ok(init.capabilities.tools);
         assert.ok(init.capabilities.logging);
         assert.match(init.instructions, /Nothing can be deleted/);
@@ -957,7 +958,7 @@ async function main() {
     const pluginManifest = readJson(".claude-plugin", "plugin.json");
     const mock = await startMockApi();
     try {
-        await legacySuite(mock, pluginManifest.version);
+        await legacySuite(mock, RUNTIME_VERSION);
         await modernSuite(mock);
         await credentialSuite(mock);
         await olderProtocolSuite(mock);

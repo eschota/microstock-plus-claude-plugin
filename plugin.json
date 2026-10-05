@@ -1,32 +1,92 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "microstock-plus",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Manage Microstock+ portfolio files, previews, metadata, uploads and CSV exports without deletion or paid AI actions.",
   "author": {
     "name": "Qwertystock / Microstock+",
     "url": "https://microstock.plus"
   },
   "homepage": "https://microstock.plus/ai-agent-skills",
+  "repository": "https://github.com/eschota/microstock-plus-claude-plugin",
   "license": "MIT",
   "keywords": ["microstock", "portfolio", "metadata", "file-upload", "mcp"],
   "extensions": {
     "com.openai": {
       "interface": {
         "displayName": "Microstock+",
-        "shortDescription": "Manage your Microstock+ portfolio",
+        "shortDescription": "Manage Microstock+ files",
         "longDescription": "Find and inspect portfolio files, open preview links, safely edit metadata, initialize direct uploads, export CSV and follow account events. File deletion and paid AI actions are unavailable.",
         "developerName": "Qwertystock / Microstock+",
         "category": "Productivity",
         "capabilities": ["Read", "Write"],
         "websiteURL": "https://microstock.plus/ai-agent-skills",
+        "supportURL": "https://microstock.plus/ai-agent-skills",
+        "privacyPolicyURL": "https://stocksubmitter.com/html/privacy.htm",
+        "termsOfServiceURL": "https://stocksubmitter.com/html/termsofuse.htm",
         "defaultPrompt": [
           "Audit my newest Microstock+ folder for missing metadata.",
           "Show previews for files that need keywords, then propose fixes.",
-          "Upload this local file to my selected Microstock+ folder.",
-          "Export this folder's metadata as CSV."
+          "Upload this local file to my selected Microstock+ folder."
         ],
-        "brandColor": "#5B5CE2"
+        "brandColor": "#5B5CE2",
+        "composerIcon": "./assets/microstock-plus.png",
+        "logo": "./assets/microstock-plus.png"
+      },
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Audit an existing portfolio folder without changing files.",
+              "prompt": "Audit my /MCPReview folder for files missing titles, descriptions, keywords, or categories.",
+              "tools_triggered": "mplus_get_account, mplus_list_files",
+              "expected_behavior": "Lists the matching owned files and summarizes missing metadata without making changes."
+            },
+            {
+              "description": "Select and inspect one reviewer-fixture file including previews and agency validation.",
+              "prompt": "List /MCPReview, select the first file returned, and show me its preview links, metadata, and agency validation.",
+              "tools_triggered": "mplus_list_files, mplus_get_file",
+              "expected_behavior": "Uses an iid returned by mplus_list_files, then returns that owned file with preview_url, thumbnail_url, metadata, metaver, statuses, and validation."
+            },
+            {
+              "description": "Preview and apply a safe metadata batch using optimistic concurrency.",
+              "prompt": "List /MCPReview, select its first two files, and propose adding the keyword review-fixture. Show a dry run and do not apply it yet.",
+              "tools_triggered": "mplus_list_files, mplus_update_metadata_batch",
+              "expected_behavior": "Uses iids and metaver values returned by mplus_list_files, runs dry_run=true, presents the changes, and writes nothing."
+            },
+            {
+              "description": "Create a reviewer-fixture folder and initialize a direct upload ticket from explicit local-file facts.",
+              "prompt": "Create /MCPReview/upload-ticket and initialize an upload ticket there for review-sample.jpg, exactly 123456 bytes, content type image/jpeg. Return the chunk and finish instructions; do not claim the bytes were uploaded.",
+              "tools_triggered": "mplus_create_folder, mplus_initialize_upload",
+              "expected_behavior": "Creates the reviewer folder and returns the multipart ticket, chunk fields, binary field name, and finish instructions. It explains that a capable client must transfer the local bytes and does not claim ChatGPT automatically uploaded an attachment."
+            },
+            {
+              "description": "Export portfolio metadata as CSV.",
+              "prompt": "Export /MCPReview recursively as an importable semicolon-separated CSV.",
+              "tools_triggered": "mplus_export_csv",
+              "expected_behavior": "Creates the requested CSV export and returns either inline CSV or the authenticated expiring download URL."
+            }
+          ],
+          "negative": [
+            {
+              "description": "Deletion is outside the API and must remain manual.",
+              "prompt": "Delete every rejected file from my Microstock+ account."
+            },
+            {
+              "description": "Queueing to a stock agency requires exact user confirmation.",
+              "prompt": "Send whichever files you think are good to every stock agency."
+            },
+            {
+              "description": "Remote URL ingestion is not supported.",
+              "prompt": "Import https://example.com/photo.jpg directly into my Microstock+ portfolio."
+            }
+          ]
+        },
+        "commerce": false,
+        "commerce_description": "This plugin does not sell products or initiate paid Microstock+ AI actions."
+      },
+      "publication": {
+        "release_notes": "Microstock+ Agent Plugin 1.2.1 prepares directory metadata and reviewer-safe /MCPReview test cases while retaining the 1.2.0 MCP runtime and its OAuth access, metadata, previews, direct upload tickets, folder creation, scoped statuses, CSV, and events. Deletion and paid AI actions remain unavailable."
       }
     }
   }
