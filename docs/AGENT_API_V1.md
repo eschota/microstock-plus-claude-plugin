@@ -154,6 +154,9 @@ Event types: `file.metadata.updated`, `file.status.changed` (data: agency, from,
 | GET | `/folders` | files:read | folder tree (`archive=false`) |
 | POST | `/folders` | files:upload | create one folder below an existing parent |
 | GET | `/files` | files:read | list/search files |
+| POST | `/files/previews` | files:read | authenticated preview bytes for 1-8 owner files |
+| POST | `/files/istock-terms/resolve` | files:read | iStock/Getty term candidates for 1-10 owner files |
+| POST | `/files/istock-terms/batch` | metadata:write | dry-run or save selected iStock term ids |
 | GET | `/files/{iid}` | files:read | one file with metadata, statuses, validation |
 | PATCH | `/files/{iid}/metadata` | metadata:write | merge-patch metadata of one file |
 | POST | `/files/metadata:batch` | metadata:write | up to 100 patches, per-item results, `dry_run` |
@@ -169,11 +172,38 @@ Event types: `file.metadata.updated`, `file.status.changed` (data: agency, from,
 
 ### GET /files — query
 
-`folder` (path, default `/`), `recursive` (bool), `search` (text or iids),
+`folder` (path, default `/`), `recursive` (bool, HTTP API default `false`), `search` (text or iids),
 `type` (raster|vector|video), `agency` + `status` (e.g. `agency=esp&status=ready`),
 `missing` (`title|description|keywords|categories`), `min_keywords`/`max_keywords`,
 `archived` (default false), `updated_since`, `limit`, `cursor`.
 Returns `file` objects without `metadata.description` unless `expand=metadata`.
+
+### POST /files/previews — body and response
+
+Send `{"iids":["..."],"detail":"preview"}` with 1-8 iids. `detail` is `preview`
+(default) or `thumbnail`. The response preserves IID order and contains a result per
+item: `ready` carries `mime_type`, `data_base64`, `width`, `height` and `source`;
+`processing` or `unavailable` carries `error_code` and `message`. Decoded images in
+one response total at most 2 MiB. This endpoint reads only files owned by the key's
+account. It does not return a CDN credential and does not fetch arbitrary URLs.
+
+### iStock controlled-vocabulary terms
+
+`POST /files/istock-terms/resolve` accepts 1-10 `iids`, `stock` (`esp` or
+`qhero`, default `esp`) and `locale: "en"`. Each file is `ready` or `pending`.
+A ready file returns its `metaver`, original and unresolved keywords, offered
+`{id,label}` candidates, current selections, `source`, observation time,
+nullable source freshness time and a signed
+`candidate_set_id`. The caller chooses by looking at the authenticated preview;
+it must never invent term ids. Unresolved keywords have no current candidates.
+
+`POST /files/istock-terms/batch` accepts `dry_run`, the same stock and locale,
+and 1-10 patches with `iid`, `if_match_metaver`, `candidate_set_id` and exactly
+one offered id for each keyword being changed. Omitted keywords keep only
+still-valid existing selections. Always dry-run, show the chosen labels, then
+save only after the owner asks. Each successful result returns the exact merged
+selection map that was checked or saved. Candidate signatures and metaver prevent stale
+or forged choices. This is metadata work, not paid AI and not submission.
 
 ### PATCH /files/{iid}/metadata — body
 
@@ -229,7 +259,7 @@ The endpoint does not accept a remote source URL and never downloads an arbitrar
 
 ### AI keywording
 
-These endpoints are disabled and are not published as MCP tools in 1.2.0. They remain
+These endpoints are disabled and are not published as MCP tools in 1.3.0. They remain
 in this contract only as reserved compatibility paths; paid AI is outside this release.
 
 1. `POST /ai/keywording:quote {"iids": [...], "mode": "replace|skip", "template_id": null}` →

@@ -30,7 +30,7 @@ package does not create or reinterpret legal text.
    the requested `/.well-known/openai-apps-challenge` URL. The token cannot be
    prepared before the portal generates it.
 4. Connect and authorize the production MCP server, wait for the tool and skill
-   scans, and resolve every required finding. Confirm all eleven production tools
+   scans, and resolve every required finding. Confirm all fourteen production tools
    and their annotations match the package.
 5. Create a dedicated reviewer account with safe sample portfolio data and all
    scopes needed by the positive cases. Enter credentials and sign-in instructions

@@ -17,7 +17,7 @@ import { ALL_SCOPES, DEFAULT_SCOPES, startMockApi } from "./mock-api.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SERVER_PATH = path.join(ROOT, "server", "mplus-mcp.mjs");
-const RUNTIME_VERSION = "1.2.0";
+const RUNTIME_VERSION = "1.3.0";
 const MODERN = "2026-07-28";
 const IID = {
     leaves42: "6abc74e948864d403ea0c559",
@@ -30,11 +30,11 @@ const IID = {
     aiCity: "6abc74e948864d403ea0c566"
 };
 const EXPECTED_TOOLS = [
-    "mplus_create_folder", "mplus_export_csv", "mplus_get_account", "mplus_get_file", "mplus_get_job", "mplus_initialize_upload", "mplus_list_files", "mplus_list_folders",
-    "mplus_quote_ai_keywording", "mplus_run_ai_keywording", "mplus_set_status", "mplus_update_metadata",
+    "mplus_create_folder", "mplus_export_csv", "mplus_get_account", "mplus_get_file", "mplus_get_job", "mplus_get_previews", "mplus_initialize_upload", "mplus_list_files", "mplus_list_folders",
+    "mplus_quote_ai_keywording", "mplus_resolve_istock_terms", "mplus_run_ai_keywording", "mplus_set_istock_terms", "mplus_set_status", "mplus_update_metadata",
     "mplus_update_metadata_batch", "mplus_wait_for_events"
 ];
-const WRITE_TOOLS = ["mplus_create_folder", "mplus_update_metadata", "mplus_update_metadata_batch", "mplus_initialize_upload", "mplus_set_status"];
+const WRITE_TOOLS = ["mplus_create_folder", "mplus_update_metadata", "mplus_update_metadata_batch", "mplus_initialize_upload", "mplus_set_status", "mplus_set_istock_terms"];
 // Tools of features the shipping Agent API keeps switched off: offered only with MPLUS_ENABLE_PREVIEW_TOOLS=1.
 const PREVIEW_TOOLS = ["mplus_get_job", "mplus_quote_ai_keywording", "mplus_run_ai_keywording"];
 const AVAILABLE_TOOLS = EXPECTED_TOOLS.filter(name => !PREVIEW_TOOLS.includes(name));
@@ -231,7 +231,7 @@ async function legacySuite(mock, runtimeVersion) {
         assert.match(init.instructions, /dry_run=true first/);
     });
 
-    await check("tools/list with MPLUS_ENABLE_PREVIEW_TOOLS=1: the 12 contract tools with schemas and annotations, nothing that deletes", async () => {
+    await check("tools/list with MPLUS_ENABLE_PREVIEW_TOOLS=1: the 16 contract tools with schemas and annotations, nothing that deletes", async () => {
         const { result } = await client.request("tools/list", {});
         const tools = result.tools;
         assert.deepEqual(tools.map(tool => tool.name).sort(), EXPECTED_TOOLS);
@@ -301,6 +301,12 @@ async function legacySuite(mock, runtimeVersion) {
         assert.equal(page2.data.length, 2);
         assert.ok(page2.data.every(file => !page1.data.some(other => other.iid === file.iid)), "pages must not overlap");
 
+        const previews = await callTool(client, "mplus_get_previews", { iids: page2.data.map(file => file.iid) });
+        const previewManifest = expectOk(previews, "second page previews");
+        assert.deepEqual(previewManifest.previews.map(item => item.iid), page2.data.map(file => file.iid), "preview order follows requested iids");
+        assert.ok(previews.content.some(block => block.type === "image" && block.mimeType === "image/png"), "native image block missing");
+        assert.doesNotMatch(JSON.stringify(previewManifest), /data_base64|iVBORw0/, "structured output must not duplicate base64 bytes");
+
         const byIids = expectOk(await callTool(client, "mplus_list_files", { recursive: true, iids: [IID.drone, IID.icons] }), "iids");
         assert.deepEqual(byIids.data.map(file => file.iid).sort(), [IID.icons, IID.drone].sort());
 
@@ -312,12 +318,48 @@ async function legacySuite(mock, runtimeVersion) {
         const result = await callTool(client, "mplus_get_file", { iid: IID.leaves42 });
         const file = expectOk(result, "mplus_get_file");
         assert.equal(file.metaver, 1);
+        assert.equal(file.preview.state, "ready");
+        assert.ok(result.content.some(block => block.type === "image" && block.mimeType === "image/png"), "get_file must include the preview for cached tool connections");
+        assert.doesNotMatch(JSON.stringify(file), /data_base64|iVBORw0/, "get_file structured output must not contain image bytes");
         assert.deepEqual(file.metadata.keywords, ["autumn", "forest", "road", "sunrise"]);
         assert.ok(file.agencies.shutterstock.validation.some(issue => issue.code === "keywords_min"));
         assert.match(file.summary, /if_match_metaver 1/);
         assert.match(textOf(result), /Keywords \(4\): autumn, forest, road, sunrise/);
         expectToolError(await callTool(client, "mplus_get_file", { iid: "ffffffffffffffffffffffff" }), /404, file_not_found/, "unknown iid");
         expectToolError(await callTool(client, "mplus_get_file", { iid: "../me" }), /Invalid input.*iid has an invalid format/, "path injection");
+    });
+
+    await check("mplus_get_previews: ordered native image blocks plus per-item processing errors", async () => {
+        const result = await callTool(client, "mplus_get_previews", { iids: [IID.leaves42, IID.empty43], detail: "thumbnail" });
+        const batch = expectOk(result, "mplus_get_previews");
+        assert.deepEqual(batch.previews.map(item => [item.iid, item.state]), [[IID.leaves42, "ready"], [IID.empty43, "processing"]]);
+        const images = result.content.filter(block => block.type === "image");
+        assert.equal(images.length, 1);
+        assert.deepEqual(Buffer.from(images[0].data, "base64").subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), "image block must carry actual PNG bytes");
+        const labelIndex = result.content.findIndex(block => block.type === "text" && block.text === `Preview for iid ${IID.leaves42}:`);
+        assert.equal(result.content[labelIndex + 1]?.type, "image", "each image must immediately follow its IID label");
+        assert.match(textOf(result), new RegExp(`1\\. ${IID.leaves42}: ready[\\s\\S]*2\\. ${IID.empty43}: processing`));
+    });
+
+    await check("iStock terms: resolve offered ids, dry-run first, then save with metaver and signed candidate set", async () => {
+        const resolution = expectOk(await callTool(client, "mplus_resolve_istock_terms", { iids: [IID.aiCity, IID.empty43] }), "resolve iStock terms");
+        assert.deepEqual(resolution.files.map(file => file.state), ["ready", "pending"]);
+        const file = resolution.files[0];
+        assert.match(file.candidate_set_id, /^istk_[a-f0-9]{64}$/);
+        assert.deepEqual(file.candidates.city1[0], { id: "1000", label: "city1 (primary meaning)" });
+        const patch = { iid: file.iid, if_match_metaver: file.metaver, candidate_set_id: file.candidate_set_id, selections: { city1: ["1000"] } };
+        const dry = expectOk(await callTool(client, "mplus_set_istock_terms", { dry_run: true, patches: [patch] }), "dry-run iStock terms");
+        assert.equal(dry.results[0].dry_run, true);
+        assert.deepEqual(dry.results[0].selections, patch.selections, "dry run returns the exact merged selections");
+        assert.match(dry.summary, /Nothing was saved.*ask the user before saving/);
+        const saved = expectOk(await callTool(client, "mplus_set_istock_terms", { dry_run: false, patches: [patch] }), "save iStock terms");
+        assert.equal(saved.results[0].metaver, file.metaver + 1);
+        assert.deepEqual(saved.results[0].selections, patch.selections, "save returns the exact merged selections");
+        const writes = mock.requests.filter(entry => entry.path.endsWith("/files/istock-terms/batch"));
+        assert.equal(writes.length, 2);
+        assert.ok(writes.every(entry => /^[0-9a-f-]{36}$/.test(entry.idempotencyKey)), "term writes need idempotency keys");
+        const bad = expectOk(await callTool(client, "mplus_set_istock_terms", { dry_run: true, patches: [{ ...patch, if_match_metaver: file.metaver + 1, candidate_set_id: `istk_${IID.aiCity.padEnd(64, "f")}` }] }), "stale candidate set");
+        assert.equal(bad.results[0].error.code, "candidate_set_changed");
     });
 
     await check("mplus_update_metadata: merge patch with if_match_metaver, Idempotency-Key and User-Agent", async () => {
@@ -633,7 +675,7 @@ async function modernSuite(mock) {
         assert.equal(result.cacheScope, "private");
         assert.ok(result.ttlMs > 0);
         const names = result.tools.map(tool => tool.name);
-        assert.equal(names.length, 13);
+        assert.equal(names.length, 16);
         assert.ok(!names.includes("mplus_run_ai_keywording"));
         assert.ok(result.tools.every(tool => tool.outputSchema));
     });
@@ -918,7 +960,7 @@ async function packagingSuite(pluginManifest) {
         assert.equal(portable.version, pluginManifest.version);
         assert.equal(readJson("mcp.json").mcpServers["microstock-plus"].url, "https://microstock.plus/mcp");
         const catalogue = readJson("server", "tools.json");
-        assert.equal(catalogue.length, 11);
+        assert.equal(catalogue.length, 14);
         assert.deepEqual(catalogue.map(tool => tool.name).sort(), AVAILABLE_TOOLS);
         assert.ok(catalogue.every(tool => tool.scope && tool.api?.method && tool.api?.path));
         const marketplace = readJson(".claude-plugin", "marketplace.json");
@@ -937,7 +979,8 @@ async function packagingSuite(pluginManifest) {
         const spec = readJson("openapi", "agent-api-v1.json");
         assert.equal(spec.openapi, "3.1.0");
         const expected = {
-            "/me": ["get"], "/folders": ["get", "post"], "/files": ["get"], "/files/{iid}": ["get", "delete"],
+            "/me": ["get"], "/folders": ["get", "post"], "/files": ["get"], "/files/previews": ["post"],
+            "/files/istock-terms/resolve": ["post"], "/files/istock-terms/batch": ["post"], "/files/{iid}": ["get", "delete"],
             "/files/{iid}/metadata": ["patch"], "/files/metadata:batch": ["post"], "/files/status:batch": ["post"],
             "/uploads/init": ["post"], "/exports/csv": ["post"], "/exports/{id}/download": ["get"], "/ai/keywording:quote": ["post"],
             "/ai/keywording:run": ["post"], "/jobs/{id}": ["get"], "/events": ["get"], "/events/stream": ["get"]

@@ -34,7 +34,7 @@ import { createInterface } from "node:readline";
 
 const SERVER_NAME = "microstock-plus";
 const SERVER_TITLE = "Microstock+";
-const SERVER_VERSION = "1.2.0";
+const SERVER_VERSION = "1.3.0";
 const SERVER_INFO = Object.freeze({
     name: SERVER_NAME,
     title: SERVER_TITLE,
@@ -90,6 +90,9 @@ const HTTP_ACCOUNT_CACHE_MAX = 100;
 const LIST_LIMIT_MAX = 200;
 const BATCH_MAX_ITEMS = 100;
 const EXPORT_MAX_IIDS = 500;
+const PREVIEW_MAX_IIDS = 8;
+const PREVIEW_MAX_RAW_BYTES = 2 * 1024 * 1024;
+const ISTOCK_MAX_IIDS = 10;
 const UPLOAD_MAX_BYTES = 10 * 1024 * 1024 * 1024;
 const AI_MAX_IIDS = 1000;
 const EVENT_WAIT_MAX_S = 25;
@@ -389,6 +392,9 @@ const ERROR_ADVICE = {
     job_not_found: "Check the job id returned by mplus_run_ai_keywording.",
     deletion_not_supported: "Nothing can be deleted through the Agent API. The user deletes files by hand in the Microstock+ web interface (My Files).",
     metadata_conflict: "The file changed since the metaver you sent. Re-read it with mplus_get_file, merge your change into the current metadata, and retry with the new metaver.",
+    invalid_istock_term: "Use exactly one term id offered for that keyword by the latest mplus_resolve_istock_terms result; never invent a vocabulary id.",
+    candidate_set_changed: "The controlled-vocabulary candidates changed. Resolve the file again, review the new labels, and dry-run the new selections.",
+    istock_terms_pending: "The iStock vocabulary provider is still resolving terms. Call mplus_resolve_istock_terms again later.",
     quote_expired: "The quote expired. Create a new one with mplus_quote_ai_keywording and confirm the new price with the user before running it.",
     idempotency_mismatch: "An earlier request reused this Idempotency-Key with a different body. Repeat the call; this server sends a fresh key for every call.",
     batch_too_large: `Send at most ${BATCH_MAX_ITEMS} items per call.`,
@@ -830,6 +836,17 @@ const KEYWORD_SCHEMA = {
     pattern: "^[^,;\\r\\n]+$",
     description: "One keyword or short phrase, without commas or semicolons"
 };
+const ISTOCK_SELECTIONS_SCHEMA = {
+    type: "object",
+    minProperties: 1,
+    additionalProperties: {
+        type: "array",
+        items: { type: "string", minLength: 1, maxLength: 128 },
+        minItems: 1,
+        maxItems: 1
+    },
+    description: "Map each original keyword to exactly one term id offered for it by mplus_resolve_istock_terms."
+};
 
 function iidList(max, description) {
     return { type: "array", items: IID_SCHEMA, minItems: 1, maxItems: max, uniqueItems: true, description };
@@ -987,6 +1004,20 @@ const METADATA_OUTPUT = {
         notes: T.nullableString
     }
 };
+const PREVIEW_MANIFEST_ITEM_OUTPUT = {
+    type: "object",
+    properties: {
+        iid: T.string,
+        state: { type: "string", enum: ["ready", "processing", "unavailable"] },
+        mime_type: T.nullableString,
+        width: T.nullableInteger,
+        height: T.nullableInteger,
+        source: T.nullableString,
+        error_code: T.nullableString,
+        message: T.nullableString
+    },
+    required: ["iid", "state"]
+};
 const FILE_OUTPUT = {
     type: "object",
     properties: {
@@ -1003,9 +1034,65 @@ const FILE_OUTPUT = {
         metaver: T.integer,
         metadata: METADATA_OUTPUT,
         agencies: { type: "object", additionalProperties: AGENCY_STATE_OUTPUT },
-        has_ai_metadata: T.boolean
+        has_ai_metadata: T.boolean,
+        preview: PREVIEW_MANIFEST_ITEM_OUTPUT
     },
     required: ["iid", "metaver"]
+};
+const PREVIEW_BATCH_OUTPUT = {
+    type: "object",
+    properties: {
+        object: T.string,
+        previews: { type: "array", items: PREVIEW_MANIFEST_ITEM_OUTPUT }
+    },
+    required: ["object", "previews"]
+};
+const ISTOCK_TERM_ID_LIST_OUTPUT = { type: "array", items: T.string };
+const ISTOCK_CANDIDATE_OUTPUT = {
+    type: "object",
+    properties: { id: T.string, label: T.string },
+    required: ["id", "label"]
+};
+const ISTOCK_RESOLVED_FILE_OUTPUT = {
+    type: "object",
+    properties: {
+        iid: T.string,
+        state: { type: "string", enum: ["ready", "pending"] },
+        metaver: T.integer,
+        keywords: { type: "array", items: T.string },
+        unresolved_keywords: { type: "array", items: T.string },
+        candidates: { type: "object", additionalProperties: { type: "array", items: ISTOCK_CANDIDATE_OUTPUT } },
+        selections: { type: "object", additionalProperties: ISTOCK_TERM_ID_LIST_OUTPUT },
+        candidate_set_id: T.nullableString,
+        source: { type: "string", enum: ["cache", "cache_and_provider", "provider", "pending"] },
+        observed_at: T.string,
+        source_fresh_at: T.nullableString
+    },
+    required: ["iid", "state", "metaver", "keywords", "unresolved_keywords", "candidates", "selections", "candidate_set_id", "source", "observed_at", "source_fresh_at"]
+};
+const ISTOCK_RESOLUTION_OUTPUT = {
+    type: "object",
+    properties: { object: T.string, files: { type: "array", items: ISTOCK_RESOLVED_FILE_OUTPUT } },
+    required: ["object", "files"]
+};
+const ISTOCK_BATCH_OUTPUT = {
+    type: "object",
+    properties: {
+        object: T.string,
+        results: {
+            type: "array",
+            items: {
+                type: "object",
+                properties: {
+                    iid: T.string, ok: T.boolean, metaver: T.integer, dry_run: T.boolean,
+                    selections: { type: "object", additionalProperties: ISTOCK_TERM_ID_LIST_OUTPUT },
+                    error: API_ERROR_OUTPUT
+                },
+                required: ["iid", "ok"]
+            }
+        }
+    },
+    required: ["object", "results"]
 };
 const FOLDER_OUTPUT = {
     type: "object",
@@ -1305,7 +1392,6 @@ function describeFileDetails(file, account) {
     const releases = arrayOf(meta.releases);
     lines.push(`Releases: ${releases.length ? releases.join(", ") : "(none)"}${textOf(meta.notes) ? ` · Notes: ${truncate(meta.notes, 200)}` : ""}`);
     lines.push("Agencies:", describeStatusesLong(file, account));
-    if (file.preview_url) lines.push(`Preview: ${file.preview_url}`);
     return lines.join("\n");
 }
 
@@ -1441,7 +1527,7 @@ function fileListQuery(args) {
     }
     return {
         folder: args.folder,
-        recursive: args.recursive,
+        recursive: args.recursive ?? true,
         search: args.search ?? (args.iids ? args.iids.join(",") : undefined),
         type: args.type,
         agency: args.agency,
@@ -1459,7 +1545,7 @@ function fileListQuery(args) {
 
 function describeFileFilters(args) {
     const filters = [];
-    filters.push(`in ${args.folder ?? "/"}${args.recursive ? " and subfolders" : ""}`);
+    filters.push(`in ${args.folder ?? "/"}${args.recursive !== false ? " and subfolders" : ""}`);
     if (args.search) filters.push(`matching "${truncate(args.search, 60)}"`);
     if (args.iids) filters.push(`among ${plural(args.iids.length, "requested iid")}`);
     if (args.type) filters.push(`of type ${args.type}`);
@@ -1499,7 +1585,129 @@ async function getFile(args, ctx) {
         issues.length ? `Validation: ${issues.join(", ")}.` : "No validation warnings.",
         `Pass if_match_metaver ${data.metaver} when you change it.`
     ].join(" ");
-    return { data, summary, text: describeFileDetails(data, ctx.account) };
+    let preview;
+    try {
+        preview = await loadPreviews([args.iid], "preview", ctx);
+    } catch (error) {
+        if (ctx.signal?.aborted) throw error;
+        debug(`inline preview failed for ${args.iid}: ${error?.code || error?.message || error}`);
+        preview = {
+            data: { object: "preview_batch", previews: [{ iid: args.iid, state: "unavailable", error_code: "preview_fetch_failed", message: "The preview could not be loaded; the file metadata is still available." }] },
+            content: []
+        };
+    }
+    const previewItem = preview.data.previews[0];
+    const enriched = { ...data, preview: previewItem };
+    return {
+        data: enriched,
+        summary,
+        text: `${describeFileDetails(data, ctx.account)}\nPreview state: ${previewItem?.state || "unavailable"}.`,
+        extraContent: preview.content
+    };
+}
+
+function decodePreview(item) {
+    const iid = textOf(item?.iid);
+    const state = textOf(item?.state);
+    if (!iid || !["ready", "processing", "unavailable"].includes(state)) {
+        throw new ApiError({ status: 200, type: "api_error", code: "invalid_response", message: "The preview API returned an invalid preview item." });
+    }
+    if (state !== "ready") {
+        return {
+            manifest: {
+                iid, state,
+                error_code: textOf(item.error_code) || null,
+                message: textOf(item.message) || null
+            },
+            block: null,
+            rawBytes: 0
+        };
+    }
+    const mimeType = textOf(item.mime_type).toLowerCase();
+    const encoded = textOf(item.data_base64);
+    if (!mimeType.startsWith("image/") || !encoded || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) {
+        throw new ApiError({ status: 200, type: "api_error", code: "invalid_response", message: `The preview API returned invalid image data for ${iid}.` });
+    }
+    const rawBytes = Buffer.from(encoded, "base64").byteLength;
+    return {
+        manifest: {
+            iid, state, mime_type: mimeType,
+            width: Number.isInteger(item.width) ? item.width : null,
+            height: Number.isInteger(item.height) ? item.height : null,
+            source: textOf(item.source) || null
+        },
+        block: { type: "image", data: encoded, mimeType },
+        rawBytes
+    };
+}
+
+async function loadPreviews(iids, detail, ctx) {
+    const { data } = await ctx.api.request("POST", "/files/previews", {
+        body: { iids, detail }, signal: ctx.signal
+    });
+    if (data.object !== "preview_batch" || !Array.isArray(data.previews)) {
+        throw new ApiError({ status: 200, type: "api_error", code: "invalid_response", message: "The preview API returned an invalid batch." });
+    }
+    const byIid = new Map(data.previews.map(item => [item?.iid, item]));
+    let rawBytes = 0;
+    const manifest = [];
+    const content = [];
+    for (const iid of iids) {
+        const decoded = decodePreview(byIid.get(iid) || { iid, state: "unavailable", error_code: "missing_result", message: "No preview result was returned." });
+        rawBytes += decoded.rawBytes;
+        if (rawBytes > PREVIEW_MAX_RAW_BYTES) {
+            throw new ApiError({ status: 200, type: "api_error", code: "invalid_response", message: "The preview batch exceeds the 2 MiB decoded-image limit." });
+        }
+        manifest.push(decoded.manifest);
+        if (decoded.block) content.push({ type: "text", text: `Preview for iid ${iid}:` }, decoded.block);
+    }
+    return { data: { object: "preview_batch", previews: manifest }, content };
+}
+
+async function getPreviews(args, ctx) {
+    const detail = args.detail ?? "preview";
+    const result = await loadPreviews(args.iids, detail, ctx);
+    const ready = result.data.previews.filter(item => item.state === "ready").length;
+    const summary = `Loaded ${ready} of ${plural(args.iids.length, "requested preview")} in the requested IID order.`;
+    const text = result.data.previews.map((item, index) =>
+        `${index + 1}. ${item.iid}: ${item.state}${item.error_code ? ` (${item.error_code}${item.message ? `: ${item.message}` : ""})` : ""}`
+    ).join("\n");
+    return { data: result.data, summary, text, extraContent: result.content };
+}
+
+async function resolveIstockTerms(args, ctx) {
+    const body = { iids: args.iids, stock: args.stock ?? "esp", locale: "en" };
+    const { data } = await ctx.api.request("POST", "/files/istock-terms/resolve", { body, signal: ctx.signal });
+    const files = arrayOf(data.files);
+    const ready = files.filter(file => file?.state === "ready").length;
+    const pending = files.length - ready;
+    const summary = `Resolved iStock controlled-vocabulary candidates for ${ready} of ${plural(files.length, "file")}.` +
+        (pending ? ` ${plural(pending, "file")} still pending; resolve those files again later.` :
+            " Choose only ids from each keyword's candidates, then dry-run mplus_set_istock_terms before asking the user to save.");
+    const text = files.map(file => {
+        if (file?.state !== "ready") return `${file?.iid || "?"}: pending (${file?.source || "pending"})`;
+        const choices = Object.entries(isPlainObject(file.candidates) ? file.candidates : {}).map(([keyword, candidates]) =>
+            `${keyword}: ${arrayOf(candidates).map(candidate => `${candidate?.id} = ${candidate?.label}`).join("; ") || "no candidates"}`);
+        return `${file.iid} · metaver ${file.metaver} · candidate set ${file.candidate_set_id}\n${choices.join("\n")}`;
+    }).join("\n\n");
+    return { data, summary, text };
+}
+
+async function setIstockTerms(args, ctx) {
+    const body = { dry_run: args.dry_run, stock: args.stock ?? "esp", locale: "en", patches: args.patches };
+    const { data, replayed } = await ctx.api.request("POST", "/files/istock-terms/batch", {
+        body, idempotencyKey: randomUUID(), signal: ctx.signal
+    });
+    const results = arrayOf(data.results);
+    const succeeded = results.filter(item => item?.ok).length;
+    const failed = results.length - succeeded;
+    const summary = args.dry_run
+        ? `Dry run checked ${plural(results.length, "file")}: ${succeeded} valid, ${failed} failed. Nothing was saved. Show the exact choices and ask the user before saving.`
+        : `Saved iStock term choices for ${plural(succeeded, "file")}${failed ? `; ${failed} failed and were not changed` : ""}.${replayed ? " This was an idempotent replay." : ""}`;
+    const text = results.map(item => item?.ok
+        ? `${item.iid}: ${args.dry_run ? "valid dry run" : `saved at metaver ${item.metaver}`}`
+        : `${item?.iid || "?"}: ${item?.error?.code || "error"}: ${oneLine(item?.error?.message)}`).join("\n");
+    return { data, summary, text };
 }
 
 function normalizeTermOps(ops, label) {
@@ -1893,7 +2101,7 @@ const TOOLS = [
             type: "object",
             properties: {
                 folder: { ...FOLDER_PATH_SCHEMA, description: "Folder to list. Default / (the top folder)." },
-                recursive: { type: "boolean", description: "Include files in all subfolders. Default false." },
+                recursive: { type: "boolean", description: "Include files in all subfolders. Default true; pass false for only this folder." },
                 search: { type: "string", minLength: 1, maxLength: 200, description: "Text to find in file names, titles and keywords." },
                 iids: iidList(LIST_LIMIT_MAX, "Only these files (instead of search)."),
                 type: { type: "string", enum: MEDIA_TYPES, description: "Media type: raster (photos and raster illustrations), vector or video." },
@@ -1927,12 +2135,94 @@ const TOOLS = [
         handler: listFiles
     },
     {
+        name: "mplus_get_previews",
+        title: "Get Microstock+ file previews",
+        scope: "files:read",
+        description: [
+            `Load authenticated previews for 1-${PREVIEW_MAX_IIDS} files from the key owner's portfolio.`,
+            "Returns native MCP image blocks for visual clients plus a small ordered manifest for every IID, including processing or unavailable errors.",
+            "Use list pagination first, then request previews in batches; no bearer token or private CDN URL is exposed. Read-only."
+        ].join(" "),
+        inputSchema: {
+            type: "object",
+            properties: {
+                iids: iidList(PREVIEW_MAX_IIDS, "File iids in the order the previews should be returned."),
+                detail: { type: "string", enum: ["preview", "thumbnail"], description: "Image size. Default preview." }
+            },
+            required: ["iids"],
+            additionalProperties: false
+        },
+        outputSchema: withSummary(PREVIEW_BATCH_OUTPUT),
+        annotations: readAnnotations("Get Microstock+ file previews"),
+        handler: getPreviews
+    },
+    {
+        name: "mplus_resolve_istock_terms",
+        title: "Resolve iStock keyword terms",
+        scope: "files:read",
+        description: [
+            `For 1-${ISTOCK_MAX_IIDS} owner files, resolve each stored keyword against the iStock/Getty controlled vocabulary.`,
+            "Returns candidate ids and labels, existing selections, metaver and a signed candidate_set_id. Look at the file previews and choose exactly one offered id per keyword by meaning; never invent ids.",
+            "A pending file has no candidate_set_id and must be resolved again later. This lookup is read-only and does not run paid Microstock+ AI."
+        ].join(" "),
+        inputSchema: {
+            type: "object",
+            properties: {
+                iids: iidList(ISTOCK_MAX_IIDS, "Owner file iids to resolve."),
+                stock: { type: "string", enum: ["esp", "qhero"], description: "iStock submission channel. Default esp." },
+                locale: { type: "string", enum: ["en"], description: "Controlled-vocabulary locale. Only en is supported; default en." }
+            },
+            required: ["iids"],
+            additionalProperties: false
+        },
+        outputSchema: withSummary(ISTOCK_RESOLUTION_OUTPUT),
+        annotations: readAnnotations("Resolve iStock keyword terms"),
+        handler: resolveIstockTerms
+    },
+    {
+        name: "mplus_set_istock_terms",
+        title: "Set iStock keyword terms",
+        scope: "metadata:write",
+        description: [
+            `Validate or save controlled-vocabulary selections for 1-${ISTOCK_MAX_IIDS} iStock files.`,
+            "Use only candidate ids returned by mplus_resolve_istock_terms with the same iid, metaver and candidate_set_id. Start with dry_run=true, show the exact keyword-to-label choices, obtain the user's request to save, then repeat with dry_run=false.",
+            "This writes metadata only; it does not submit files, run paid AI or choose candidates for you."
+        ].join(" "),
+        inputSchema: {
+            type: "object",
+            properties: {
+                dry_run: { type: "boolean", description: "true validates without saving; always do this first." },
+                stock: { type: "string", enum: ["esp", "qhero"], description: "Same stock used when resolving. Default esp." },
+                locale: { type: "string", enum: ["en"], description: "Only en is supported; default en." },
+                patches: {
+                    type: "array", minItems: 1, maxItems: ISTOCK_MAX_IIDS,
+                    items: {
+                        type: "object",
+                        properties: {
+                            iid: IID_SCHEMA,
+                            if_match_metaver: IF_MATCH_METAVER_SCHEMA,
+                            candidate_set_id: { type: "string", pattern: "^istk_[a-f0-9]{64}$", description: "Signed candidate set returned by mplus_resolve_istock_terms." },
+                            selections: ISTOCK_SELECTIONS_SCHEMA
+                        },
+                        required: ["iid", "if_match_metaver", "candidate_set_id", "selections"],
+                        additionalProperties: false
+                    }
+                }
+            },
+            required: ["dry_run", "patches"],
+            additionalProperties: false
+        },
+        outputSchema: withSummary(ISTOCK_BATCH_OUTPUT),
+        annotations: writeAnnotations("Set iStock keyword terms"),
+        handler: setIstockTerms
+    },
+    {
         name: "mplus_get_file",
         title: "Get one Microstock+ file",
         scope: "files:read",
         description: [
             "Get one file by iid with its full metadata (title, description, keywords in order, categories, editorial, AI-generated",
-            "and illustration flags, releases, notes), its metaver (needed for safe updates), preview links, and for every agency",
+            "and illustration flags, releases, notes), its metaver (needed for safe updates), an authenticated inline preview image, and for every agency",
             "its status, upload and submission times, errors and validation warnings (for example \"Less than 7 keywords\" on",
             "Shutterstock). Read-only."
         ].join(" "),
@@ -2246,6 +2536,9 @@ const TOOL_API_ROUTES = Object.freeze({
     mplus_get_account: { method: "GET", path: "/me" },
     mplus_list_folders: { method: "GET", path: "/folders" },
     mplus_list_files: { method: "GET", path: "/files" },
+    mplus_get_previews: { method: "POST", path: "/files/previews" },
+    mplus_resolve_istock_terms: { method: "POST", path: "/files/istock-terms/resolve" },
+    mplus_set_istock_terms: { method: "POST", path: "/files/istock-terms/batch" },
     mplus_get_file: { method: "GET", path: "/files/{iid}" },
     mplus_update_metadata: { method: "PATCH", path: "/files/{iid}/metadata" },
     mplus_update_metadata_batch: { method: "POST", path: "/files/metadata:batch" },
@@ -2439,10 +2732,10 @@ async function callTool(params, env) {
     }
 }
 
-function successResult(tool, { data, summary, text }, env) {
+function successResult(tool, { data, summary, text, extraContent = [] }, env) {
     const note = rateLimitNote(env.account.api);
     const fullSummary = note ? `${summary} ${note}` : summary;
-    const content = [{ type: "text", text: text ? `${fullSummary}\n\n${text}` : fullSummary }];
+    const content = [{ type: "text", text: text ? `${fullSummary}\n\n${text}` : fullSummary }, ...extraContent];
     if (!supportsStructuredContent(env.version)) return { content };
     // Some clients show the model only structuredContent, so it carries the summary too.
     const structuredContent = { summary: fullSummary, ...data };

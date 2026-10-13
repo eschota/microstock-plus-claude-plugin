@@ -254,7 +254,7 @@
         },
         "recursive": {
           "type": "boolean",
-          "description": "Include files in all subfolders. Default false."
+          "description": "Include files in all subfolders. Default true; pass false for only this folder."
         },
         "search": {
           "type": "string",
@@ -535,6 +535,62 @@
               },
               "has_ai_metadata": {
                 "type": "boolean"
+              },
+              "preview": {
+                "type": "object",
+                "properties": {
+                  "iid": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "ready",
+                      "processing",
+                      "unavailable"
+                    ]
+                  },
+                  "mime_type": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "width": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "height": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "source": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "error_code": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "message": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "iid",
+                  "state"
+                ]
               }
             },
             "required": [
@@ -572,9 +628,464 @@
     }
   },
   {
+    "name": "mplus_get_previews",
+    "title": "Get Microstock+ file previews",
+    "description": "Load authenticated previews for 1-8 files from the key owner's portfolio. Returns native MCP image blocks for visual clients plus a small ordered manifest for every IID, including processing or unavailable errors. Use list pagination first, then request previews in batches; no bearer token or private CDN URL is exposed. Read-only.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "iids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "description": "File id (iid) from mplus_list_files, for example 6abc74e948864d403ea0c559."
+          },
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "description": "File iids in the order the previews should be returned."
+        },
+        "detail": {
+          "type": "string",
+          "enum": [
+            "preview",
+            "thumbnail"
+          ],
+          "description": "Image size. Default preview."
+        }
+      },
+      "required": [
+        "iids"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "What happened and what to do next."
+        },
+        "object": {
+          "type": "string"
+        },
+        "previews": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "iid": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "ready",
+                  "processing",
+                  "unavailable"
+                ]
+              },
+              "mime_type": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "width": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "height": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "source": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "error_code": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "message": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "iid",
+              "state"
+            ]
+          }
+        }
+      },
+      "required": [
+        "summary",
+        "object",
+        "previews"
+      ]
+    },
+    "annotations": {
+      "title": "Get Microstock+ file previews",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "scope": "files:read",
+    "api": {
+      "method": "POST",
+      "path": "/files/previews"
+    }
+  },
+  {
+    "name": "mplus_resolve_istock_terms",
+    "title": "Resolve iStock keyword terms",
+    "description": "For 1-10 owner files, resolve each stored keyword against the iStock/Getty controlled vocabulary. Returns candidate ids and labels, existing selections, metaver and a signed candidate_set_id. Look at the file previews and choose exactly one offered id per keyword by meaning; never invent ids. A pending file has no candidate_set_id and must be resolved again later. This lookup is read-only and does not run paid Microstock+ AI.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "iids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "description": "File id (iid) from mplus_list_files, for example 6abc74e948864d403ea0c559."
+          },
+          "minItems": 1,
+          "maxItems": 10,
+          "uniqueItems": true,
+          "description": "Owner file iids to resolve."
+        },
+        "stock": {
+          "type": "string",
+          "enum": [
+            "esp",
+            "qhero"
+          ],
+          "description": "iStock submission channel. Default esp."
+        },
+        "locale": {
+          "type": "string",
+          "enum": [
+            "en"
+          ],
+          "description": "Controlled-vocabulary locale. Only en is supported; default en."
+        }
+      },
+      "required": [
+        "iids"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "What happened and what to do next."
+        },
+        "object": {
+          "type": "string"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "iid": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "ready",
+                  "pending"
+                ]
+              },
+              "metaver": {
+                "type": "integer"
+              },
+              "keywords": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "unresolved_keywords": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "candidates": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "label"
+                    ]
+                  }
+                }
+              },
+              "selections": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "candidate_set_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "cache",
+                  "cache_and_provider",
+                  "provider",
+                  "pending"
+                ]
+              },
+              "observed_at": {
+                "type": "string"
+              },
+              "source_fresh_at": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "iid",
+              "state",
+              "metaver",
+              "keywords",
+              "unresolved_keywords",
+              "candidates",
+              "selections",
+              "candidate_set_id",
+              "source",
+              "observed_at",
+              "source_fresh_at"
+            ]
+          }
+        }
+      },
+      "required": [
+        "summary",
+        "object",
+        "files"
+      ]
+    },
+    "annotations": {
+      "title": "Resolve iStock keyword terms",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "scope": "files:read",
+    "api": {
+      "method": "POST",
+      "path": "/files/istock-terms/resolve"
+    }
+  },
+  {
+    "name": "mplus_set_istock_terms",
+    "title": "Set iStock keyword terms",
+    "description": "Validate or save controlled-vocabulary selections for 1-10 iStock files. Use only candidate ids returned by mplus_resolve_istock_terms with the same iid, metaver and candidate_set_id. Start with dry_run=true, show the exact keyword-to-label choices, obtain the user's request to save, then repeat with dry_run=false. This writes metadata only; it does not submit files, run paid AI or choose candidates for you.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "dry_run": {
+          "type": "boolean",
+          "description": "true validates without saving; always do this first."
+        },
+        "stock": {
+          "type": "string",
+          "enum": [
+            "esp",
+            "qhero"
+          ],
+          "description": "Same stock used when resolving. Default esp."
+        },
+        "locale": {
+          "type": "string",
+          "enum": [
+            "en"
+          ],
+          "description": "Only en is supported; default en."
+        },
+        "patches": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "properties": {
+              "iid": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                "description": "File id (iid) from mplus_list_files, for example 6abc74e948864d403ea0c559."
+              },
+              "if_match_metaver": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "The file's metaver when you read it. The change fails with metadata_conflict if the file changed since."
+              },
+              "candidate_set_id": {
+                "type": "string",
+                "pattern": "^istk_[a-f0-9]{64}$",
+                "description": "Signed candidate set returned by mplus_resolve_istock_terms."
+              },
+              "selections": {
+                "type": "object",
+                "minProperties": 1,
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "minItems": 1,
+                  "maxItems": 1
+                },
+                "description": "Map each original keyword to exactly one term id offered for it by mplus_resolve_istock_terms."
+              }
+            },
+            "required": [
+              "iid",
+              "if_match_metaver",
+              "candidate_set_id",
+              "selections"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "dry_run",
+        "patches"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "What happened and what to do next."
+        },
+        "object": {
+          "type": "string"
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "iid": {
+                "type": "string"
+              },
+              "ok": {
+                "type": "boolean"
+              },
+              "metaver": {
+                "type": "integer"
+              },
+              "dry_run": {
+                "type": "boolean"
+              },
+              "selections": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "error": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  },
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "param": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            },
+            "required": [
+              "iid",
+              "ok"
+            ]
+          }
+        }
+      },
+      "required": [
+        "summary",
+        "object",
+        "results"
+      ]
+    },
+    "annotations": {
+      "title": "Set iStock keyword terms",
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "scope": "metadata:write",
+    "api": {
+      "method": "POST",
+      "path": "/files/istock-terms/batch"
+    }
+  },
+  {
     "name": "mplus_get_file",
     "title": "Get one Microstock+ file",
-    "description": "Get one file by iid with its full metadata (title, description, keywords in order, categories, editorial, AI-generated and illustration flags, releases, notes), its metaver (needed for safe updates), preview links, and for every agency its status, upload and submission times, errors and validation warnings (for example \"Less than 7 keywords\" on Shutterstock). Read-only.",
+    "description": "Get one file by iid with its full metadata (title, description, keywords in order, categories, editorial, AI-generated and illustration flags, releases, notes), its metaver (needed for safe updates), an authenticated inline preview image, and for every agency its status, upload and submission times, errors and validation warnings (for example \"Less than 7 keywords\" on Shutterstock). Read-only.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -750,6 +1261,62 @@
         },
         "has_ai_metadata": {
           "type": "boolean"
+        },
+        "preview": {
+          "type": "object",
+          "properties": {
+            "iid": {
+              "type": "string"
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "ready",
+                "processing",
+                "unavailable"
+              ]
+            },
+            "mime_type": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "width": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "height": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "source": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "error_code": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "message": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "iid",
+            "state"
+          ]
         }
       },
       "required": [
@@ -1119,6 +1686,62 @@
         },
         "has_ai_metadata": {
           "type": "boolean"
+        },
+        "preview": {
+          "type": "object",
+          "properties": {
+            "iid": {
+              "type": "string"
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "ready",
+                "processing",
+                "unavailable"
+              ]
+            },
+            "mime_type": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "width": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "height": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "source": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "error_code": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "message": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "iid",
+            "state"
+          ]
         }
       },
       "required": [
@@ -1534,6 +2157,62 @@
                   },
                   "has_ai_metadata": {
                     "type": "boolean"
+                  },
+                  "preview": {
+                    "type": "object",
+                    "properties": {
+                      "iid": {
+                        "type": "string"
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "ready",
+                          "processing",
+                          "unavailable"
+                        ]
+                      },
+                      "mime_type": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "width": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "height": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "source": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "error_code": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "message": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "iid",
+                      "state"
+                    ]
                   }
                 },
                 "required": [

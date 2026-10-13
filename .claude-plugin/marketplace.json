@@ -5,13 +5,13 @@
     "url": "https://microstock.plus"
   },
   "metadata": {
-    "description": "The Microstock+ plugin for Claude: manage a stock contributor's portfolio, metadata, CSV exports and agency uploads."
+    "description": "The Microstock+ plugin for Claude: inspect authenticated portfolio previews, refine metadata and iStock terms, export CSV and initialize uploads."
   },
   "plugins": [
     {
       "name": "microstock-plus",
       "source": "./",
-      "description": "Manage Microstock+ files from Claude: view previews, edit metadata safely, initialize direct file uploads, inspect statuses and export CSV. Nothing can be deleted and no paid AI tools are included."
+      "description": "Manage Microstock+ files from Claude: view authenticated inline previews, edit metadata and iStock keyword refinements safely, upload local files, inspect statuses and export CSV. Nothing can be deleted and no paid AI tools are included."
     }
   ]
 }

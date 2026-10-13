@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.0 - 2026-10-13
+
+- Added `mplus_get_previews` and `POST /files/previews`: up to eight owner-scoped previews are returned as native MCP image blocks with an ordered compact manifest, partial processing/unavailable states and a 2 MiB decoded-image limit. Base64 image data is never duplicated in text or `structuredContent`.
+- `mplus_get_file` now loads one authenticated preview inline for clients with cached tool lists; preview failure leaves the file metadata available. `mplus_list_files` includes subfolders by default unless `recursive=false`, and the guides require following every `next_cursor` for a whole portfolio.
+- Added `mplus_resolve_istock_terms` and `mplus_set_istock_terms` for iStock/Getty controlled-vocabulary refinement. Agents choose only offered IDs by inspecting the preview, dry-run first, and save only on the owner's request; signed candidate sets and `metaver` prevent stale or forged choices. These are not paid AI actions.
+- Expanded the portable production catalogue to 14 tools and updated the OpenAPI contract, Claude/OpenAI plugin descriptions, English and Russian guides, skills, mock API and protocol smoke coverage.
+
 ## 1.2.1 - 2026-10-05
 
 - Prepared OpenAI directory metadata: verified existing public support/privacy/terms links, owner-source icons, three starter prompts, five positive and three negative review cases, and release notes.

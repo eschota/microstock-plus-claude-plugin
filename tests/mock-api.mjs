@@ -59,6 +59,7 @@ const QUOTE_TTL_MS = 15 * 60_000;
 const EXPORT_TTL_MS = 60 * 60_000;
 const EVENT_WAIT_MAX_S = 25;
 const PIPELINE_STEP_MS = 60;
+const MOCK_PNG_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
 const AGENCIES = [
     { id: "adobestock", name: "Adobe Stock" },
@@ -684,6 +685,83 @@ export async function startMockApi({ port = 0, host = "127.0.0.1", rateLimits = 
         return { body: paginate(files, ctx.query) };
     }
 
+    function getPreviews(ctx) {
+        const { iids, detail = "preview" } = ctx.body;
+        if (!Array.isArray(iids) || iids.length < 1 || iids.length > 8) {
+            throw fail.invalid("invalid_param", "iids must contain 1 to 8 file ids.", "iids");
+        }
+        if (!iids.every(iid => typeof iid === "string" && /^[0-9a-f]{24}$/.test(iid))) {
+            throw fail.invalid("invalid_param", "Every iid must be a 24-character lowercase hexadecimal id.", "iids");
+        }
+        if (!["preview", "thumbnail"].includes(detail)) {
+            throw fail.invalid("invalid_param", "detail must be preview or thumbnail.", "detail");
+        }
+        const previews = iids.map(iid => {
+            if (!state.files.has(iid)) {
+                return { iid, state: "unavailable", error_code: "file_not_found", message: "The file was not found." };
+            }
+            if (iid.endsWith("560")) {
+                return { iid, state: "processing", error_code: "preview_processing", message: "The preview is still being prepared." };
+            }
+            return {
+                iid, state: "ready", mime_type: "image/png", data_base64: MOCK_PNG_BASE64,
+                width: detail === "thumbnail" ? 1 : 1, height: 1, source: "generated"
+            };
+        });
+        return { body: { object: "preview_batch", previews } };
+    }
+
+    function resolveIstockTerms(ctx) {
+        const { iids, stock = "esp", locale = "en" } = ctx.body;
+        if (!Array.isArray(iids) || iids.length < 1 || iids.length > 10) throw fail.invalid("invalid_param", "iids must contain 1 to 10 file ids.", "iids");
+        if (!["esp", "qhero"].includes(stock)) throw fail.invalid("invalid_stock", "stock must be esp or qhero.", "stock");
+        if (locale !== "en") throw fail.invalid("invalid_locale", "Only the en iStock vocabulary is supported.", "locale");
+        const files = iids.map(iid => {
+            const file = getFileOr404(iid);
+            const keywords = [...file.metadata.keywords];
+            if (iid.endsWith("560")) {
+                return { iid, state: "pending", metaver: file.metaver, keywords, unresolved_keywords: [], candidates: {}, selections: {}, candidate_set_id: null, source: "pending", observed_at: iso(), source_fresh_at: null };
+            }
+            const candidates = Object.fromEntries(keywords.map((keyword, index) => [keyword, [
+                { id: String(1000 + index * 2), label: `${keyword} (primary meaning)` },
+                { id: String(1001 + index * 2), label: `${keyword} (alternate meaning)` }
+            ]]));
+            return {
+                iid, state: "ready", metaver: file.metaver, keywords, unresolved_keywords: [], candidates,
+                selections: Object.fromEntries(keywords.slice(0, 1).map((keyword, index) => [keyword, [String(1000 + index * 2)]])),
+                candidate_set_id: `istk_${iid.padEnd(64, "0")}`, source: "cache_and_provider", observed_at: iso(), source_fresh_at: iso()
+            };
+        });
+        return { body: { object: "istock_terms_resolution", files } };
+    }
+
+    function setIstockTerms(ctx) {
+        const { dry_run: dryRun, stock = "esp", locale = "en", patches } = ctx.body;
+        if (typeof dryRun !== "boolean" || !Array.isArray(patches) || patches.length < 1 || patches.length > 10) {
+            throw fail.invalid("invalid_patches", "dry_run and 1 to 10 patches are required.", "patches");
+        }
+        if (!["esp", "qhero"].includes(stock)) throw fail.invalid("invalid_stock", "stock must be esp or qhero.", "stock");
+        if (locale !== "en") throw fail.invalid("invalid_locale", "Only the en iStock vocabulary is supported.", "locale");
+        const results = patches.map(patch => {
+            const file = getFileOr404(patch.iid);
+            if (file.metaver !== patch.if_match_metaver) return { iid: patch.iid, ok: false, error: { type: "conflict_error", code: "metadata_conflict", message: "The file metadata changed.", param: "if_match_metaver" } };
+            if (patch.candidate_set_id !== `istk_${patch.iid.padEnd(64, "0")}`) return { iid: patch.iid, ok: false, error: { type: "conflict_error", code: "candidate_set_changed", message: "The candidate set changed.", param: "candidate_set_id" } };
+            const keywordIndex = new Map(file.metadata.keywords.map((keyword, index) => [keyword, index]));
+            const valid = Object.entries(patch.selections || {}).every(([keyword, ids]) => {
+                const index = keywordIndex.get(keyword);
+                return index !== undefined && Array.isArray(ids) && ids.length === 1 &&
+                    [String(1000 + index * 2), String(1001 + index * 2)].includes(ids[0]);
+            });
+            if (!valid) return { iid: patch.iid, ok: false, error: { type: "invalid_request_error", code: "invalid_istock_term", message: "A term was not offered.", param: "selections" } };
+            if (!dryRun) {
+                file.metaver += 1;
+                file.updated_at = iso();
+            }
+            return { iid: patch.iid, ok: true, metaver: file.metaver, dry_run: dryRun, selections: patch.selections };
+        });
+        return { body: { object: "istock_terms_batch", results } };
+    }
+
     // --- metadata
     function patchOne(iid, patch, ifMatch, dryRun) {
         const file = getFileOr404(iid);
@@ -1053,6 +1131,9 @@ export async function startMockApi({ port = 0, host = "127.0.0.1", rateLimits = 
         ["GET", /^\/folders$/, "files:read", listFolders],
         ["POST", /^\/folders$/, "files:upload", createFolder],
         ["GET", /^\/files$/, "files:read", listFiles],
+        ["POST", /^\/files\/previews$/, "files:read", getPreviews],
+        ["POST", /^\/files\/istock-terms\/resolve$/, "files:read", resolveIstockTerms],
+        ["POST", /^\/files\/istock-terms\/batch$/, "metadata:write", setIstockTerms],
         ["POST", /^\/files\/metadata:batch$/, "metadata:write", metadataBatch],
         ["POST", /^\/files\/status:batch$/, "status:write", statusBatch],
         ["GET", /^\/files\/([^/]+)$/, "files:read", getFileRoute],

@@ -1,8 +1,8 @@
 {
   "name": "microstock-plus",
   "displayName": "Microstock+",
-  "version": "1.2.1",
-  "description": "Manage Microstock+ files from Claude: view previews, edit metadata safely, initialize direct file uploads, inspect statuses and export CSV. Nothing can be deleted and no paid AI tools are included.",
+  "version": "1.3.0",
+  "description": "Manage Microstock+ files from Claude: view authenticated inline previews, edit metadata and iStock keyword refinements safely, upload local files, inspect statuses and export CSV. Nothing can be deleted and no paid AI tools are included.",
   "author": {
     "name": "Qwertystock / Microstock+",
     "url": "https://microstock.plus"

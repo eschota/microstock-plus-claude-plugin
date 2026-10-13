@@ -9,12 +9,13 @@ Use the `microstock-plus` tools. Call `mplus_get_account` first to learn which a
 
 ## Workflow
 
-1. **Read.** `mplus_get_file` for one file, or `mplus_list_files` with `expand_metadata: true` for a folder (descriptions are left out otherwise). Note each file's `metaver`, `type`, flags and `agencies.<id>.validation`. Look at the previews when you can see images.
-2. **Write** to the rules below. Describe only what is visible; ask the user about places, dates, species or names you can't confirm.
-3. **Preview.** `mplus_update_metadata_batch` with `dry_run: true`, up to 100 items `{iid, patch, if_match_metaver}`. Nothing is written.
-4. **Show and ask.** Per file: old and new title, keywords added and removed, validation that remains. Apply only after the user agrees.
-5. **Apply.** The same items with `dry_run: false`. For each `metadata_conflict`, re-read the file, merge your change into the current metadata, and retry that item with the new `metaver`; never overwrite blindly.
-6. **Report** what changed, with counts. There is no undo button: if the user wants a change reverted, write back the values you read in step 1.
+1. **Read.** `mplus_get_file` for one file (it includes its authenticated preview), or `mplus_list_files` with `expand_metadata: true` for a folder (descriptions are left out otherwise). Lists include subfolders by default; follow every `next_cursor` for a whole-portfolio request. Load several images with `mplus_get_previews` in batches of up to 8 IIDs. Note each file's `metaver`, `type`, flags and `agencies.<id>.validation`; do not infer visual facts from filenames alone.
+2. **For iStock (`esp` or `qhero`), clarify terms.** Call `mplus_resolve_istock_terms` for at most 10 files. Choose exactly one offered id per keyword by comparing its label with the authenticated preview; never invent an id. Retry `pending` files later and report `unresolved_keywords` honestly. Call `mplus_set_istock_terms` with the same metaver and signed candidate set, first with `dry_run: true`; show the choices and save only after the owner asks.
+3. **Write** to the rules below. Describe only what is visible; ask the user about places, dates, species or names you can't confirm.
+4. **Preview.** `mplus_update_metadata_batch` with `dry_run: true`, up to 100 items `{iid, patch, if_match_metaver}`. Nothing is written.
+5. **Show and ask.** Per file: old and new title, keywords added and removed, validation that remains. Apply only after the user agrees.
+6. **Apply.** The same items with `dry_run: false`. For each `metadata_conflict`, re-read the file, merge your change into the current metadata, and retry that item with the new `metaver`; never overwrite blindly.
+7. **Report** what changed, with counts. There is no undo button: if the user wants a change reverted, write back the values you read in step 1.
 
 Patch fields: `title`, `description`, `keywords` (`set` for the whole ordered list, or `add` and/or `remove`), `categories`, `editorial`, `ai_generated`, `illustration`, `releases`, `notes`, and `clear` to empty fields (empty strings are refused). For a single file you can use `mplus_update_metadata` with the same fields.
 

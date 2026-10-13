@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "microstock-plus",
-  "version": "1.2.1",
-  "description": "Manage Microstock+ portfolio files, previews, metadata, uploads and CSV exports without deletion or paid AI actions.",
+  "version": "1.3.0",
+  "description": "Manage Microstock+ portfolio files with authenticated inline previews, safe metadata and iStock term refinements, uploads and CSV exports without deletion or paid AI actions.",
   "author": {
     "name": "Qwertystock / Microstock+",
     "url": "https://microstock.plus"
@@ -16,7 +16,7 @@
       "interface": {
         "displayName": "Microstock+",
         "shortDescription": "Manage Microstock+ files",
-        "longDescription": "Find and inspect portfolio files, open preview links, safely edit metadata, initialize direct uploads, export CSV and follow account events. File deletion and paid AI actions are unavailable.",
+        "longDescription": "Find every portfolio file across paginated folders, inspect authenticated inline previews, safely edit metadata and choose offered iStock/Getty term refinements, initialize direct uploads, export CSV and follow account events. File deletion and paid AI actions are unavailable.",
         "developerName": "Qwertystock / Microstock+",
         "category": "Productivity",
         "capabilities": ["Read", "Write"],
@@ -45,8 +45,8 @@
             {
               "description": "Select and inspect one reviewer-fixture file including previews and agency validation.",
               "prompt": "List /MCPReview, select the first file returned, and show me its preview links, metadata, and agency validation.",
-              "tools_triggered": "mplus_list_files, mplus_get_file",
-              "expected_behavior": "Uses an iid returned by mplus_list_files, then returns that owned file with preview_url, thumbnail_url, metadata, metaver, statuses, and validation."
+              "tools_triggered": "mplus_list_files, mplus_get_file, mplus_get_previews",
+              "expected_behavior": "Uses only iids returned by mplus_list_files, follows next_cursor for the requested scope, and returns authenticated native image blocks with ordered per-IID status plus metadata, metaver, statuses, and validation."
             },
             {
               "description": "Preview and apply a safe metadata batch using optimistic concurrency.",
@@ -86,7 +86,7 @@
         "commerce_description": "This plugin does not sell products or initiate paid Microstock+ AI actions."
       },
       "publication": {
-        "release_notes": "Microstock+ Agent Plugin 1.2.1 prepares directory metadata and reviewer-safe /MCPReview test cases while retaining the 1.2.0 MCP runtime and its OAuth access, metadata, previews, direct upload tickets, folder creation, scoped statuses, CSV, and events. Deletion and paid AI actions remain unavailable."
+        "release_notes": "Microstock+ Agent Plugin 1.3.0 adds authenticated native image previews for visual agents, recursive whole-portfolio discovery with pagination guidance, and safe iStock/Getty keyword-term refinement with signed candidate sets and dry runs. Deletion and paid AI actions remain unavailable."
       }
     }
   }

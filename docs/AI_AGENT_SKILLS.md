@@ -20,7 +20,7 @@ With an agent key you work **as the user, with less power than the user**. You c
 - read folders, files, metadata, per-agency statuses, rejection reasons and validation;
 - edit metadata, one file at a time or in batches with a dry run;
 - export metadata as CSV;
-- inspect `preview_url` and `thumbnail_url` for each file;
+- inspect authenticated previews as native MCP image blocks;
 - initialize a direct upload of a local file into an existing folder;
 - watch an event feed of the changes made through the Agent API.
 
@@ -161,6 +161,9 @@ curl -s https://microstock.plus/api/agent/v1/me -H "Authorization: Bearer $MPLUS
 | `mplus_get_account` | `GET /me` | `account:read` | Plan, balance, connected agencies and their ids, keyword settings, limits, the key's scopes |
 | `mplus_list_folders` | `GET /folders` | `files:read` | Folder tree with file counts and per-agency status counts |
 | `mplus_list_files` | `GET /files` | `files:read` | List or search files with filters |
+| `mplus_get_previews` | `POST /files/previews` | `files:read` | Load 1-8 authenticated previews as native MCP image blocks plus an ordered manifest |
+| `mplus_resolve_istock_terms` | `POST /files/istock-terms/resolve` | `files:read` | Get offered iStock/Getty term ids and labels for 1-10 files |
+| `mplus_set_istock_terms` | `POST /files/istock-terms/batch` | `metadata:write` | Dry-run or save one offered term id per keyword |
 | `mplus_get_file` | `GET /files/{iid}` | `files:read` | One file: full metadata, metaver, statuses, validation |
 | `mplus_update_metadata` | `PATCH /files/{iid}/metadata` | `metadata:write` | Merge-patch one file |
 | `mplus_update_metadata_batch` | `POST /files/metadata:batch` | `metadata:write` | Up to 100 patches, per-item results, `dry_run` |
@@ -180,11 +183,11 @@ Start a session with `mplus_get_account` (`GET /me`): it tells you which agencie
 Read only; change nothing.
 
 1. Find the folder: `mplus_list_folders` (`GET /folders`). Each folder shows its file count and how many files are in each status per agency.
-2. List the problems, each with `recursive=true` when subfolders count:
+2. List the problems. `mplus_list_files` includes subfolders by default; pass `recursive=false` only when the user means exactly one folder:
    - missing fields: `mplus_list_files` with `missing: ["title", "keywords"]` (`GET /files?folder=/foto/2026&recursive=true&missing=title,keywords`); a file matches if any listed field is missing;
    - too few keywords: `max_keywords: 6` finds files Shutterstock refuses (fewer than 7); `max_keywords: 4` finds files below the Adobe Stock and iStock minimum of 5;
    - per-agency problems: `agency` plus `status: "notready"` lists files whose metadata fails that agency's validation; `agencies.<id>.validation` on each file says why (for example `keywords_min` "Less than 7 keywords").
-3. Read details for the files you report on: `mplus_get_file`, or `mplus_list_files` with `expand_metadata: true` (descriptions are left out of lists otherwise).
+3. Read details for the files you report on: `mplus_get_file`, or `mplus_list_files` with `expand_metadata: true` (descriptions are left out of lists otherwise). Follow every `next_cursor` until `has_more=false` when the user asks about the whole portfolio. Load images with `mplus_get_previews` in batches of at most 8 IIDs; visual MCP clients receive image blocks, while non-visual clients receive the ordered availability manifest.
 4. Report counts per problem and the worst files (name, iid, what is wrong), and propose fixes. Don't change anything until the user asks.
 
 ```bash
@@ -196,7 +199,7 @@ curl -s "https://microstock.plus/api/agent/v1/files?folder=/foto/2026&recursive=
 
 ### B. Write or improve titles, descriptions and keywords
 
-1. Read the file (`mplus_get_file`): current metadata, `metaver`, `type`, flags, and validation per agency. Look at `preview_url` when you can see images.
+1. Read the file (`mplus_get_file`): current metadata, `metaver`, `type`, flags, validation per agency, and its inline authenticated preview. For several files use `mplus_get_previews` in batches of 8. Never try to fetch `preview_url` yourself or forward the bearer key to a CDN.
 2. Write metadata that describes what is actually visible. Don't guess places, dates, species or brands you can't confirm; ask the user.
 3. Check it against the agency rules below and the user's connected agencies (`mplus_get_account`).
 4. Save it as in workflow C. For one file you can use `mplus_update_metadata` (`PATCH /files/{iid}/metadata`) with `if_match_metaver`.
@@ -206,6 +209,8 @@ curl -s "https://microstock.plus/api/agent/v1/files?folder=/foto/2026&recursive=
 **Descriptions.** One or two sentences that add context to the title: where, when, what is happening. Shutterstock uses this text and allows at most 200 characters and at least 5 words. Editorial captions usually need the place and the date, for example Shutterstock's format `CITY, COUNTRY - MONTH DD, YYYY: what happens`.
 
 **Keywords.** One word or a short phrase per keyword, in English, most important first: the main subject, then what is visible (objects, people, actions, setting), then concepts (mood, season, use). No commas inside a keyword (the MCP tools refuse them), no repeats, no irrelevant or misleading words; spamming keywords gets files rejected. Microstock+ trims and de-duplicates them, lower-cases them if the user's setting says so, and accepts at most 50 per file.
+
+**iStock keyword clarification.** After ordinary English keywords exist, call `mplus_resolve_istock_terms` for at most 10 files. Inspect each authenticated preview and choose exactly one id from the candidates returned for each keyword; labels distinguish meanings such as a fruit from a company. `unresolved_keywords` have no current candidate. A `pending` file has no usable candidate set: retry later. Call `mplus_set_istock_terms` with the returned `metaver` and `candidate_set_id`, first with `dry_run=true`. Show the keyword-to-label choices and save with `dry_run=false` only after the owner asks. Never invent ids or reuse a candidate set after metadata changes. Omitted keywords retain only existing choices that remain valid. This provider lookup and metadata save are not paid Microstock+ AI.
 
 | Agency (`id`) | Keywords | Titles and descriptions | Notes |
 | - | - | - | - |
