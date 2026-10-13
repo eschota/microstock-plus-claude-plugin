@@ -5,6 +5,8 @@ description: Manage a stock contributor's Microstock+ (M+) portfolio with the mi
 
 # Manage a Microstock+ portfolio
 
+If MCP tools are absent and the user provided an agent token, use the `mplus-connect` skill first and execute these workflows through their documented HTTP API equivalents. Do not require MCP installation before API work.
+
 Microstock+ keeps the user's stock photos, vectors and videos with their titles, descriptions and keywords, checks the metadata against each agency's rules, and uploads and submits files to agencies. The `microstock-plus` tools act on the account that owns the configured agent key, with less power than the user. For writing metadata, follow the `mplus-keywording` skill.
 
 ## Start
@@ -19,7 +21,7 @@ Microstock+ keeps the user's stock photos, vectors and videos with their titles,
 2. **File upload is direct and scoped.** Call `mplus_initialize_upload` only for a local file the user selected. Transfer its bytes directly to the returned `upload.chunk` endpoint, then call `upload.finish`. Never provide a remote source URL. The destination directory must already exist.
 3. **Nothing paid.** Microstock+ AI keywording is not available through the tools yet either, so nothing you can do costs money. Write metadata yourself with the `mplus-keywording` skill.
 4. **Preview metadata batches** with `dry_run: true` before applying them, and pass `if_match_metaver`.
-5. **Keep credentials out of the conversation.** Remote clients use the Microstock+ OAuth login. Local stdio clients store the agent key in their MCP configuration; never ask the user to paste it into chat.
+5. **Keep credentials out of the conversation.** OAuth clients use the Microstock+ login. Direct API clients use the token the user supplied for this connection. Never echo it; use a private secret store or authorized private client configuration, never a shared/project file.
 
 ## Audit a folder
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.0 — 2026-10-13
+
+- Add skill-plus-token onboarding through the direct Agent API, without running an MCP server. Capable agents can configure the existing remote MCP client afterward.
+- Add a bounded read-only connection checker with secret-free client examples and separate API/configuration/tool-availability states. MCP runtime remains 1.3.1.
+
 ## 1.3.1 - 2026-10-13
 
 - Added short-lived, owner-scoped preview links on `microstock.plus` as a fallback for agents that do not render native MCP image blocks. Each link is re-authorized when used and expires after five minutes.

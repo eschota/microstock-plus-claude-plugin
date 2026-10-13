@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "microstock-plus",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "description": "Manage Microstock+ portfolio files with authenticated inline previews, safe metadata and iStock term refinements, uploads and CSV exports without deletion or paid AI actions.",
   "author": {
     "name": "Qwertystock / Microstock+",
@@ -10,7 +10,13 @@
   "homepage": "https://microstock.plus/ai-agent-skills",
   "repository": "https://github.com/eschota/microstock-plus-claude-plugin",
   "license": "MIT",
-  "keywords": ["microstock", "portfolio", "metadata", "file-upload", "mcp"],
+  "keywords": [
+    "microstock",
+    "portfolio",
+    "metadata",
+    "file-upload",
+    "mcp"
+  ],
   "extensions": {
     "com.openai": {
       "interface": {
@@ -19,7 +25,10 @@
         "longDescription": "Find every portfolio file across paginated folders, inspect authenticated inline previews, safely edit metadata and choose offered iStock/Getty term refinements, initialize direct uploads, export CSV and follow account events. File deletion and paid AI actions are unavailable.",
         "developerName": "Qwertystock / Microstock+",
         "category": "Productivity",
-        "capabilities": ["Read", "Write"],
+        "capabilities": [
+          "Read",
+          "Write"
+        ],
         "websiteURL": "https://microstock.plus/ai-agent-skills",
         "supportURL": "https://microstock.plus/ai-agent-skills",
         "privacyPolicyURL": "https://stocksubmitter.com/html/privacy.htm",
@@ -86,7 +95,7 @@
         "commerce_description": "This plugin does not sell products or initiate paid Microstock+ AI actions."
       },
       "publication": {
-        "release_notes": "Microstock+ Agent Plugin 1.3.1 adds short-lived same-origin preview links as a fallback for agents that do not consume native MCP image blocks. Raw preview-CDN URLs are removed from tool output. Deletion and paid AI actions remain unavailable."
+        "release_notes": "Microstock+ Agent Plugin 1.4.0 adds skill-plus-token onboarding through the direct API and optional client MCP setup by capable agents. The read-only checker verifies access without installing a server. MCP runtime 1.3.1 preserves inline previews and canonical preview links. Deletion and paid AI actions remain unavailable."
       }
     }
   }

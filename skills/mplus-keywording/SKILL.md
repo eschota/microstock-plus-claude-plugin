@@ -5,6 +5,8 @@ description: Write and improve stock metadata in Microstock+ - titles, descripti
 
 # Keyword stock files in Microstock+
 
+If MCP tools are absent and the user provided an agent token, use the `mplus-connect` skill first and execute these workflows through their documented HTTP API equivalents. Do not require MCP installation before API work.
+
 Use the `microstock-plus` tools. Call `mplus_get_account` first to learn which agencies the user has connected: write for those agencies.
 
 ## Workflow

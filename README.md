@@ -1,5 +1,10 @@
 # Microstock+ for AI agents
 
+## Skill + token: start without an MCP server
+
+Create an agent key on the M+ page and copy the prepared message to an agent with HTTP or terminal access. The [connection skill](https://microstock.plus/ai-agent-skills/skill.md?mode=connect) verifies API access first and continues through the API. It can also guide the agent to configure the existing remote MCP endpoint itself when the host supports it. A plain chat without HTTP or MCP tools still needs a supported connection. `server/mplus-connect.mjs` is an optional read-only checker, not a server or installer.
+
+
 Manage your stock portfolio from Claude Code, ChatGPT, Codex, Cursor and any MCP-compatible agent. [Microstock+](https://microstock.plus) keeps your photos, vectors and videos with their metadata and agency state. This kit connects an agent to the owner's account through the Microstock+ Agent API.
 
 With this plugin, Claude can:
@@ -73,7 +78,7 @@ You can revoke the key on the same page at any time.
 
 ### ChatGPT and Codex
 
-In ChatGPT, enable Developer mode under **Settings → Security and login**, open **Apps** or **Plugins** (the label varies by surface/account), press **+**, and connect `https://microstock.plus/mcp`. Microstock+ OAuth opens when access is needed. The portable ChatGPT/Codex package is defined by `plugin.json`, `mcp.json` and `skills/`; it is ready for direct testing, but has not been submitted to the public plugin directory.
+In ChatGPT, open **Plugins → + → Add custom MCP server**, enter `https://microstock.plus/mcp` and complete Microstock+ OAuth. Install the created plugin, then select it with `@` in a new Work chat. The portable ChatGPT/Codex package is defined by `plugin.json`, `mcp.json` and `skills/`; it is ready for direct testing, but has not been submitted to the public plugin directory.
 
 In Codex or another client that supports remote MCP URLs, connect the same URL and complete OAuth. The local Node stdio server remains available for clients that prefer an agent key.
 

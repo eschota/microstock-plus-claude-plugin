@@ -1,5 +1,8 @@
 # Microstock+ AI Agent Skills
 
+**Skill + token, no MCP server required:** begin with the [connection skill](https://microstock.plus/ai-agent-skills/skill.md?mode=connect). It uses direct authenticated HTTP first and optionally configures the current client’s remote MCP. In the workflows below, use the API endpoint corresponding to a tool when MCP tools are unavailable.
+
+
 For AI agents (Claude, Codex, Cursor and other MCP clients) that work for a Microstock+ user.
 
 | | |
@@ -34,7 +37,7 @@ With an agent key you work **as the user, with less power than the user**. You c
 4. **Preview before you write.** Run every metadata batch with `dry_run: true` first, show the planned changes, then apply them.
 5. **Never overwrite a newer edit.** Send `if_match_metaver` with every change. On `409 metadata_conflict`, re-read the file and merge.
 6. **Don't invent ids.** Categories come from the fixed table in the reference below. The API cannot list release or AI template ids: reuse ids that already appear on the user's files, or leave those fields to the user.
-7. **Keep the key secret.** Never print, log, store in files or repositories, or send the key anywhere except `https://microstock.plus`.
+7. **Keep the key secret.** Never echo or log the key, write it into a shared/project file, or send it anywhere except `https://microstock.plus`. Authorized private client credential storage is allowed; prefer an environment reference or secret store.
 8. **Everything you do is visible.** Changes are saved to the user's files at once and show up in My Files, and every call is audited with the key's prefix. There is no undo button: if the user wants a change reverted, write back the values you read before it.
 
 ## Authentication
@@ -62,11 +65,11 @@ With an agent key you work **as the user, with less power than the user**. You c
 | `ai:quote` | AI keywording price quote | not available yet |
 | `ai:run` | AI keywording run (charges the balance) | not available yet |
 
-Keys can hold only the first five scopes today; the last three can't be added until their endpoints are switched on (`ai:run` will then be off by default). There is no delete scope, and none can be added. `GET /me` (`mplus_get_account`) shows the current key's scopes; its `balance_eur` is `null` in this release.
+Keys may hold the seven available scopes above. Paid AI scopes and deletion remain unavailable; GET /me reports the permissions actually granted.
 
 ## Connect
 
-### MCP server (recommended)
+### Optional MCP connection
 
 For Claude Code, the shortest setup uses the hosted OAuth MCP:
 
@@ -74,16 +77,13 @@ For Claude Code, the shortest setup uses the hosted OAuth MCP:
 claude mcp add --transport http microstock-plus https://microstock.plus/mcp
 ```
 
-For ChatGPT, enable Developer mode under **Settings → Security and login**, open
-**Apps** or **Plugins** (the label varies by surface/account), press **+**, paste `https://microstock.plus/mcp`, and complete the
-Microstock+ OAuth login. Public directory publication is a separate review step; this
-package is for direct connection and testing until that approval occurs.
+For ChatGPT, add a custom MCP server in Plugins, use `https://microstock.plus/mcp` with OAuth, install the created plugin and select it in a new Work chat. Public directory publication is a separate review step.
 
 `mplus-mcp.mjs` is a single-file MCP server with no dependencies. It needs Node.js 18 or newer and the key in the `MPLUS_API_KEY` environment variable, and it talks only to `https://microstock.plus` over HTTPS. Download it from https://microstock.plus/ai-agent-skills/mplus-mcp.mjs?download=1 and use an absolute path in the snippets below.
 
 Paid AI tools are not part of the published MCP catalogue. Optional status tools appear only when enabled by the production API and key scopes.
 
-**Claude Code, with the GitHub plugin.** The `microstock-plus` plugin bundles two skills, three commands and the hosted OAuth MCP. It needs no copied agent key. Install it from the public GitHub marketplace:
+**Claude Code, with the GitHub plugin.** The `microstock-plus` plugin bundles three skills, three commands and the hosted OAuth MCP. It needs no copied agent key. Install it from the public GitHub marketplace:
 
 ```bash
 claude plugin marketplace add eschota/microstock-plus-claude-plugin

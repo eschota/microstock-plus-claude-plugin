@@ -981,7 +981,7 @@ async function packagingSuite(pluginManifest) {
         const marketplace = readJson(".claude-plugin", "marketplace.json");
         assert.equal(marketplace.name, "microstock-plus");
         assert.equal(marketplace.plugins[0].source, "./");
-        for (const skill of ["mplus-portfolio-management", "mplus-keywording"]) {
+        for (const skill of ["mplus-connect", "mplus-portfolio-management", "mplus-keywording"]) {
             const text = readFileSync(path.join(ROOT, "skills", skill, "SKILL.md"), "utf8");
             assert.match(text, new RegExp(`^---\\r?\\nname: ${skill}\\r?\\ndescription: .+`), `${skill} frontmatter`);
         }
