@@ -710,6 +710,18 @@
                   "null"
                 ]
               },
+              "preview_url": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "expires_at": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
               "error_code": {
                 "type": [
                   "string",

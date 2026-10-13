@@ -17,7 +17,7 @@ import { ALL_SCOPES, DEFAULT_SCOPES, startMockApi } from "./mock-api.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SERVER_PATH = path.join(ROOT, "server", "mplus-mcp.mjs");
-const RUNTIME_VERSION = "1.3.0";
+const RUNTIME_VERSION = "1.3.1";
 const MODERN = "2026-07-28";
 const IID = {
     leaves42: "6abc74e948864d403ea0c559",
@@ -300,6 +300,8 @@ async function legacySuite(mock, runtimeVersion) {
         const page2 = expectOk(await callTool(client, "mplus_list_files", { recursive: true, limit: 2, cursor: page1.next_cursor }), "page 2");
         assert.equal(page2.data.length, 2);
         assert.ok(page2.data.every(file => !page1.data.some(other => other.iid === file.iid)), "pages must not overlap");
+        assert.ok(page2.data.every(file => file.preview_url === null || file.preview_url.includes("/api/agent/v1/previews/")), "list preview links must use the canonical API route");
+        assert.doesNotMatch(JSON.stringify(page2), /mock\.microstock\.plus\/(?:previews|thumbs)/, "raw preview hosts must not reach MCP output");
 
         const previews = await callTool(client, "mplus_get_previews", { iids: page2.data.map(file => file.iid) });
         const previewManifest = expectOk(previews, "second page previews");
@@ -318,13 +320,23 @@ async function legacySuite(mock, runtimeVersion) {
         const result = await callTool(client, "mplus_get_file", { iid: IID.leaves42 });
         const file = expectOk(result, "mplus_get_file");
         assert.equal(file.metaver, 1);
-        assert.equal(file.preview.state, "ready");
+        assert.equal(file.preview, undefined, "get_file keeps the cached 1.2 DTO shape");
+        assert.equal(file.preview_url, file.thumbnail_url);
+        assert.match(file.preview_url, /\/api\/agent\/v1\/previews\/.+\/image$/);
         assert.ok(result.content.some(block => block.type === "image" && block.mimeType === "image/png"), "get_file must include the preview for cached tool connections");
         assert.doesNotMatch(JSON.stringify(file), /data_base64|iVBORw0/, "get_file structured output must not contain image bytes");
         assert.deepEqual(file.metadata.keywords, ["autumn", "forest", "road", "sunrise"]);
         assert.ok(file.agencies.shutterstock.validation.some(issue => issue.code === "keywords_min"));
         assert.match(file.summary, /if_match_metaver 1/);
         assert.match(textOf(result), /Keywords \(4\): autumn, forest, road, sunrise/);
+        assert.match(textOf(result), /image block is attached.*fallback link expires/i);
+        const processing = await callTool(client, "mplus_get_file", { iid: IID.empty43 });
+        const processingFile = expectOk(processing, "processing preview file");
+        assert.equal(processingFile.preview, undefined);
+        assert.equal(processingFile.preview_url, null);
+        assert.equal(processingFile.thumbnail_url, null);
+        assert.equal(processing.content.some(block => block.type === "image"), false);
+        assert.match(processingFile.summary, /No preview image is attached: preview_processing.*still being prepared/i);
         expectToolError(await callTool(client, "mplus_get_file", { iid: "ffffffffffffffffffffffff" }), /404, file_not_found/, "unknown iid");
         expectToolError(await callTool(client, "mplus_get_file", { iid: "../me" }), /Invalid input.*iid has an invalid format/, "path injection");
     });
@@ -335,10 +347,13 @@ async function legacySuite(mock, runtimeVersion) {
         assert.deepEqual(batch.previews.map(item => [item.iid, item.state]), [[IID.leaves42, "ready"], [IID.empty43, "processing"]]);
         const images = result.content.filter(block => block.type === "image");
         assert.equal(images.length, 1);
+        assert.match(batch.previews[0].preview_url, /\/api\/agent\/v1\/previews\/.+\/image$/);
+        assert.equal(batch.previews[1].preview_url, undefined, "processing previews must not advertise a fetch URL");
         assert.deepEqual(Buffer.from(images[0].data, "base64").subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), "image block must carry actual PNG bytes");
         const labelIndex = result.content.findIndex(block => block.type === "text" && block.text === `Preview for iid ${IID.leaves42}:`);
         assert.equal(result.content[labelIndex + 1]?.type, "image", "each image must immediately follow its IID label");
         assert.match(textOf(result), new RegExp(`1\\. ${IID.leaves42}: ready[\\s\\S]*2\\. ${IID.empty43}: processing`));
+        assert.match(textOf(result), /image blocks are attached.*fallback links expire/i);
     });
 
     await check("iStock terms: resolve offered ids, dry-run first, then save with metaver and signed candidate set", async () => {
@@ -999,7 +1014,10 @@ async function packagingSuite(pluginManifest) {
 
 async function main() {
     const pluginManifest = readJson(".claude-plugin", "plugin.json");
-    const mock = await startMockApi();
+    // Preview-capability fallback links add one read request after file/preview
+    // reads. Keep this broad semantic suite away from the rate-limit boundary;
+    // dedicated checks below still exercise 429 and Retry-After behavior.
+    const mock = await startMockApi({ rateLimits: { requests: 200 } });
     try {
         await legacySuite(mock, RUNTIME_VERSION);
         await modernSuite(mock);

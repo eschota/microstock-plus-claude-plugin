@@ -187,7 +187,7 @@ Read only; change nothing.
    - missing fields: `mplus_list_files` with `missing: ["title", "keywords"]` (`GET /files?folder=/foto/2026&recursive=true&missing=title,keywords`); a file matches if any listed field is missing;
    - too few keywords: `max_keywords: 6` finds files Shutterstock refuses (fewer than 7); `max_keywords: 4` finds files below the Adobe Stock and iStock minimum of 5;
    - per-agency problems: `agency` plus `status: "notready"` lists files whose metadata fails that agency's validation; `agencies.<id>.validation` on each file says why (for example `keywords_min` "Less than 7 keywords").
-3. Read details for the files you report on: `mplus_get_file`, or `mplus_list_files` with `expand_metadata: true` (descriptions are left out of lists otherwise). Follow every `next_cursor` until `has_more=false` when the user asks about the whole portfolio. Load images with `mplus_get_previews` in batches of at most 8 IIDs; visual MCP clients receive image blocks, while non-visual clients receive the ordered availability manifest.
+3. Read details for the files you report on: `mplus_get_file`, or `mplus_list_files` with `expand_metadata: true` (descriptions are left out of lists otherwise). Follow every `next_cursor` until `has_more=false` when the user asks about the whole portfolio. Load images with `mplus_get_previews` in batches of at most 8 IIDs; visual MCP clients receive image blocks, while other clients can use the five-minute `microstock.plus` fallback URL. Rerun the tool after expiry.
 4. Report counts per problem and the worst files (name, iid, what is wrong), and propose fixes. Don't change anything until the user asks.
 
 ```bash
@@ -199,7 +199,7 @@ curl -s "https://microstock.plus/api/agent/v1/files?folder=/foto/2026&recursive=
 
 ### B. Write or improve titles, descriptions and keywords
 
-1. Read the file (`mplus_get_file`): current metadata, `metaver`, `type`, flags, validation per agency, and its inline authenticated preview. For several files use `mplus_get_previews` in batches of 8. Never try to fetch `preview_url` yourself or forward the bearer key to a CDN.
+1. Read the file (`mplus_get_file`): current metadata, `metaver`, `type`, flags, validation per agency, and its inline authenticated preview. For several files use `mplus_get_previews` in batches of 8. Use the attached image pixels first. `preview_url` and `thumbnail_url` are five-minute fallback URLs on canonical `microstock.plus`; rerun the tool after expiry. Never forward the bearer key to a CDN.
 2. Write metadata that describes what is actually visible. Don't guess places, dates, species or brands you can't confirm; ask the user.
 3. Check it against the agency rules below and the user's connected agencies (`mplus_get_account`).
 4. Save it as in workflow C. For one file you can use `mplus_update_metadata` (`PATCH /files/{iid}/metadata`) with `if_match_metaver`.

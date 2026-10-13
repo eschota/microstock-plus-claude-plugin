@@ -711,6 +711,17 @@ export async function startMockApi({ port = 0, host = "127.0.0.1", rateLimits = 
         return { body: { object: "preview_batch", previews } };
     }
 
+    function getPreviewLinks(ctx) {
+        const { iids } = ctx.body;
+        if (!Array.isArray(iids) || iids.length < 1 || iids.length > 200) {
+            throw fail.invalid("invalid_param", "iids must contain 1 to 200 file ids.", "iids");
+        }
+        const links = iids.map(iid => state.files.has(iid) && !iid.endsWith("560")
+            ? { iid, state: "ready", url: `http://127.0.0.1:${server.address().port}/api/agent/v1/previews/${iid.padEnd(43, "x")}/image`, expires_at: iso(Date.now() + 300_000) }
+            : { iid, state: "unavailable", error_code: "preview_unavailable", message: "The preview is unavailable." });
+        return { body: { object: "preview_links", links } };
+    }
+
     function resolveIstockTerms(ctx) {
         const { iids, stock = "esp", locale = "en" } = ctx.body;
         if (!Array.isArray(iids) || iids.length < 1 || iids.length > 10) throw fail.invalid("invalid_param", "iids must contain 1 to 10 file ids.", "iids");
@@ -1131,6 +1142,7 @@ export async function startMockApi({ port = 0, host = "127.0.0.1", rateLimits = 
         ["GET", /^\/folders$/, "files:read", listFolders],
         ["POST", /^\/folders$/, "files:upload", createFolder],
         ["GET", /^\/files$/, "files:read", listFiles],
+        ["POST", /^\/files\/preview-links$/, "files:read", getPreviewLinks],
         ["POST", /^\/files\/previews$/, "files:read", getPreviews],
         ["POST", /^\/files\/istock-terms\/resolve$/, "files:read", resolveIstockTerms],
         ["POST", /^\/files\/istock-terms\/batch$/, "metadata:write", setIstockTerms],
@@ -1241,7 +1253,9 @@ export async function startMockApi({ port = 0, host = "127.0.0.1", rateLimits = 
             if (!target) throw new ApiFailure(405, "invalid_request_error", "method_not_allowed", `${req.method} is not allowed on ${route}.`);
             const key = authenticate(req);
             record.keyPrefix = key.prefix;
-            const mutation = req.method === "POST" || req.method === "PATCH";
+            const hasBody = req.method === "POST" || req.method === "PATCH";
+            const mutation = hasBody && !["/files/previews", "/files/preview-links", "/files/istock-terms/resolve"]
+                .includes(route);
             headers = { ...headers, ...rateLimit(key, mutation) };
             if (target.feature && disabled.has(target.feature)) {
                 throw fail.permission("endpoint_disabled", DISABLED_REASONS[target.feature]);
@@ -1249,9 +1263,9 @@ export async function startMockApi({ port = 0, host = "127.0.0.1", rateLimits = 
             if (!key.scopes.includes(target.scope)) {
                 throw fail.permission("scope_required", `This key lacks the ${target.scope} scope.`, target.scope);
             }
-            const rawBody = mutation ? await readBody(req) : "";
+            const rawBody = hasBody ? await readBody(req) : "";
             let body = {};
-            if (mutation) {
+            if (hasBody) {
                 try {
                     body = rawBody ? JSON.parse(rawBody) : {};
                 } catch {

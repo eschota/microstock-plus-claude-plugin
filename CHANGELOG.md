@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.1 - 2026-10-13
+
+- Added short-lived, owner-scoped preview links on `microstock.plus` as a fallback for agents that do not render native MCP image blocks. Each link is re-authorized when used and expires after five minutes.
+- Removed raw preview-CDN URLs from file and preview tool results. Agents receive native image blocks first and the canonical fallback link only when it is available.
+- Kept preview failures partial: metadata remains usable, while the preview manifest reports an unavailable state instead of leaking or retrying the source CDN URL.
+
 ## 1.3.0 - 2026-10-13
 
 - Added `mplus_get_previews` and `POST /files/previews`: up to eight owner-scoped previews are returned as native MCP image blocks with an ordered compact manifest, partial processing/unavailable states and a 2 MiB decoded-image limit. Base64 image data is never duplicated in text or `structuredContent`.

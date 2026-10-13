@@ -10,7 +10,7 @@ Microstock+ keeps the user's stock photos, vectors and videos with their titles,
 ## Start
 
 - Call `mplus_get_account` first. It returns the connected agencies with the ids every other tool expects (for example `adobestock` = Adobe Stock, `esp` = iStock, `shutterstock`, `pond5`), keyword settings, limits, and what this key may do.
-- Find files with `mplus_list_folders` (folder tree with per-agency status counts) and `mplus_list_files` (subfolders included by default; filters: `folder` + `recursive`, `search` or `iids`, `type`, `agency` + `status`, `missing`, `min_keywords` / `max_keywords`). Follow `next_cursor` until the requested scope is complete. Read one file with `mplus_get_file`; load several authenticated images with `mplus_get_previews` in batches of up to 8 IIDs.
+- Find files with `mplus_list_folders` (folder tree with per-agency status counts) and `mplus_list_files` (subfolders included by default; filters: `folder` + `recursive`, `search` or `iids`, `type`, `agency` + `status`, `missing`, `min_keywords` / `max_keywords`). Follow `next_cursor` until the requested scope is complete. Read one file with `mplus_get_file`; load several authenticated images with `mplus_get_previews` in batches of up to 8 IIDs. Use attached image pixels first; canonical fallback links expire after five minutes, so rerun the tool rather than trying a raw preview-CDN URL.
 - Every result has a `summary` that says what happened and what to call next, including the `cursor` for the next page.
 
 ## Rules

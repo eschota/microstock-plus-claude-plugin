@@ -9,7 +9,7 @@ With this plugin, Claude can:
 - **Check statuses and rejections** on each agency, with the reasons agencies gave.
 - **Export CSV** in the free layouts of Export CSV in My Files.
 - **Follow the changes** it makes, through the event feed.
-- **See previews inside the agent** through authenticated MCP image blocks; no CDN token handling is needed.
+- **See previews inside the agent** through authenticated MCP image blocks, with a five-minute fallback URL on `microstock.plus` for clients that cannot consume image blocks; no CDN token handling or CDN DNS is needed.
 - **Upload local files** directly to an existing Microstock+ folder with a short-lived upload ticket.
 
 Paid Microstock+ AI actions are outside this integration. Agency status changes use the opt-in `status:write` permission; queueing always requires explicit confirmation.
@@ -97,7 +97,7 @@ The server works with any MCP client: Cursor, OpenAI Codex CLI, and others. [doc
 
 - **No deletion.** There is no delete tool; the server never sends a `DELETE` request, and the API answers any such request with `405 deletion_not_supported`.
 - **No spending.** Paid AI quote/run tools are not published by this kit.
-- **See the whole portfolio.** `mplus_list_files` includes subfolders by default; follow `next_cursor` through every page, then call `mplus_get_previews` in batches of up to 8 IIDs. Visual MCP clients receive image blocks without exposing the agent key to a CDN.
+- **See the whole portfolio.** `mplus_list_files` includes subfolders by default; follow `next_cursor` through every page, then call `mplus_get_previews` in batches of up to 8 IIDs. Visual MCP clients receive image blocks. File DTO links are short-lived canonical `microstock.plus` fallbacks, never raw preview-CDN URLs; rerun the tool after expiry.
 - **Clarify iStock keywords.** Resolve Getty vocabulary candidates, choose offered IDs from the actual preview, dry-run, and save the owner's approved choices. This lookup is not a paid AI action.
 - **Direct uploads only.** Upload initialization accepts local file facts (`filename`, byte size, MIME type and destination directory), never a remote source URL.
 - **Controlled agency sending.** `queued` sends files to one agency and is refused unless the user approved the exact files and agency and the call includes `user_confirmed: true`.

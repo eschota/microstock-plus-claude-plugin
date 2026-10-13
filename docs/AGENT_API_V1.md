@@ -155,6 +155,8 @@ Event types: `file.metadata.updated`, `file.status.changed` (data: agency, from,
 | POST | `/folders` | files:upload | create one folder below an existing parent |
 | GET | `/files` | files:read | list/search files |
 | POST | `/files/previews` | files:read | authenticated preview bytes for 1-8 owner files |
+| POST | `/files/preview-links` | files:read | five-minute same-origin links for up to 200 owner files |
+| GET | `/previews/{capability}/image` | preview capability | fetch one watermarked preview; Bearer credentials are ignored |
 | POST | `/files/istock-terms/resolve` | files:read | iStock/Getty term candidates for 1-10 owner files |
 | POST | `/files/istock-terms/batch` | metadata:write | dry-run or save selected iStock term ids |
 | GET | `/files/{iid}` | files:read | one file with metadata, statuses, validation |
@@ -186,6 +188,20 @@ item: `ready` carries `mime_type`, `data_base64`, `width`, `height` and `source`
 `processing` or `unavailable` carries `error_code` and `message`. Decoded images in
 one response total at most 2 MiB. This endpoint reads only files owned by the key's
 account. It does not return a CDN credential and does not fetch arbitrary URLs.
+
+### Preview fallback links
+
+`POST /files/preview-links` accepts `{"iids":["..."]}` with 1-200 owner IIDs and
+returns an ordered `ready` or `unavailable` result for each. A ready result contains
+an opaque `https://microstock.plus/api/agent/v1/previews/{capability}/image` URL and
+`expires_at`; the capability expires after five minutes and is bound to the owner,
+the issuing key and its `files:read` scope.
+
+`GET /previews/{capability}/image` returns only the watermarked JPEG or PNG preview.
+It rechecks the key, account, scope and file ownership on every fetch. Cookies and
+Bearer credentials do not extend the capability and cannot use it on any other API
+route. Responses are private and `no-store`; rerun the file or preview tool after
+expiry. Raw preview-CDN URLs are not returned to MCP clients.
 
 ### iStock controlled-vocabulary terms
 
@@ -259,7 +275,7 @@ The endpoint does not accept a remote source URL and never downloads an arbitrar
 
 ### AI keywording
 
-These endpoints are disabled and are not published as MCP tools in 1.3.0. They remain
+These endpoints are disabled and are not published as MCP tools in 1.3.1. They remain
 in this contract only as reserved compatibility paths; paid AI is outside this release.
 
 1. `POST /ai/keywording:quote {"iids": [...], "mode": "replace|skip", "template_id": null}` →

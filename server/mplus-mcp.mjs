@@ -34,7 +34,7 @@ import { createInterface } from "node:readline";
 
 const SERVER_NAME = "microstock-plus";
 const SERVER_TITLE = "Microstock+";
-const SERVER_VERSION = "1.3.0";
+const SERVER_VERSION = "1.3.1";
 const SERVER_INFO = Object.freeze({
     name: SERVER_NAME,
     title: SERVER_TITLE,
@@ -1013,6 +1013,8 @@ const PREVIEW_MANIFEST_ITEM_OUTPUT = {
         width: T.nullableInteger,
         height: T.nullableInteger,
         source: T.nullableString,
+        preview_url: T.nullableString,
+        expires_at: T.nullableString,
         error_code: T.nullableString,
         message: T.nullableString
     },
@@ -1562,6 +1564,7 @@ async function listFiles(args, ctx) {
     const query = fileListQuery(args);
     const { data } = await ctx.api.request("GET", "/files", { query, signal: ctx.signal });
     const files = listData(data);
+    await replaceFilePreviewLinks(files, ctx);
     const filters = describeFileFilters(args);
     const descriptions = args.expand_metadata ? "" : " Descriptions are left out; pass expand_metadata=true to include them.";
     const summary = files.length
@@ -1597,13 +1600,57 @@ async function getFile(args, ctx) {
         };
     }
     const previewItem = preview.data.previews[0];
-    const enriched = { ...data, preview: previewItem };
+    data.preview_url = previewItem?.state === "ready" ? previewItem.preview_url ?? null : null;
+    data.thumbnail_url = data.preview_url;
+    // Keep the mplus_get_file structured DTO compatible with clients that
+    // cached the 1.2 output schema. Preview state lives in the text summary;
+    // typed per-item manifests are returned by mplus_get_previews.
+    const enriched = { ...data };
+    const previewNote = previewItem?.state === "ready"
+        ? "The preview image block is attached; use its pixels. The canonical Microstock+ fallback link expires in five minutes, so rerun this tool after expiry. No CDN fetch is needed."
+        : `No preview image is attached: ${previewItem?.error_code || previewItem?.state || "unavailable"}${previewItem?.message ? ` (${previewItem.message})` : ""}.`;
     return {
         data: enriched,
-        summary,
-        text: `${describeFileDetails(data, ctx.account)}\nPreview state: ${previewItem?.state || "unavailable"}.`,
+        summary: `${summary} ${previewNote}`,
+        text: `${describeFileDetails(data, ctx.account)}\nPreview state: ${previewItem?.state || "unavailable"}${previewItem?.preview_url ? ` · fallback ${previewItem.preview_url} (expires ${previewItem.expires_at})` : ""}.`,
         extraContent: preview.content
     };
+}
+
+async function canonicalPreviewLinks(iids, ctx) {
+    if (!iids.length) return new Map();
+    try {
+        const { data } = await ctx.api.request("POST", "/files/preview-links", {
+            body: { iids: [...new Set(iids)].slice(0, 200) }, signal: ctx.signal
+        });
+        if (data.object !== "preview_links" || !Array.isArray(data.links)) return new Map();
+        return new Map(data.links.filter(item => {
+            if (item?.state !== "ready" || !textOf(item.url)) return false;
+            try {
+                const url = new URL(item.url);
+                return url.origin === ctx.api.origin && /^\/api\/agent\/v1\/previews\/[A-Za-z0-9_-]{43}\/image$/.test(url.pathname) &&
+                    !url.search && !url.hash;
+            } catch { return false; }
+        })
+            .map(item => [item.iid, { url: item.url, expires_at: item.expires_at }]));
+    } catch (error) {
+        if (ctx.signal?.aborted) throw error;
+        debug(`canonical preview links failed: ${error?.code || error?.message || error}`);
+        return new Map();
+    }
+}
+
+async function replaceFilePreviewLinks(files, ctx) {
+    const candidates = files.filter(file => textOf(file?.preview_url) || textOf(file?.thumbnail_url));
+    for (const file of files) {
+        file.preview_url = null;
+        file.thumbnail_url = null;
+    }
+    const links = await canonicalPreviewLinks(candidates.map(file => file.iid), ctx);
+    for (const file of candidates) {
+        const link = links.get(file.iid);
+        if (link) file.preview_url = file.thumbnail_url = link.url;
+    }
 }
 
 function decodePreview(item) {
@@ -1661,6 +1708,11 @@ async function loadPreviews(iids, detail, ctx) {
         manifest.push(decoded.manifest);
         if (decoded.block) content.push({ type: "text", text: `Preview for iid ${iid}:` }, decoded.block);
     }
+    const links = await canonicalPreviewLinks(manifest.filter(item => item.state === "ready").map(item => item.iid), ctx);
+    for (const item of manifest) {
+        const link = links.get(item.iid);
+        if (link) { item.preview_url = link.url; item.expires_at = link.expires_at; }
+    }
     return { data: { object: "preview_batch", previews: manifest }, content };
 }
 
@@ -1668,9 +1720,10 @@ async function getPreviews(args, ctx) {
     const detail = args.detail ?? "preview";
     const result = await loadPreviews(args.iids, detail, ctx);
     const ready = result.data.previews.filter(item => item.state === "ready").length;
-    const summary = `Loaded ${ready} of ${plural(args.iids.length, "requested preview")} in the requested IID order.`;
+    const summary = `Loaded ${ready} of ${plural(args.iids.length, "requested preview")} in the requested IID order. ` +
+        "Ready image blocks are attached; use their pixels. Canonical Microstock+ fallback links expire in five minutes, so rerun this tool after expiry. No CDN fetch is needed.";
     const text = result.data.previews.map((item, index) =>
-        `${index + 1}. ${item.iid}: ${item.state}${item.error_code ? ` (${item.error_code}${item.message ? `: ${item.message}` : ""})` : ""}`
+        `${index + 1}. ${item.iid}: ${item.state}${item.preview_url ? ` · fallback ${item.preview_url} (expires ${item.expires_at})` : ""}${item.error_code ? ` (${item.error_code}${item.message ? `: ${item.message}` : ""})` : ""}`
     ).join("\n");
     return { data: result.data, summary, text, extraContent: result.content };
 }
