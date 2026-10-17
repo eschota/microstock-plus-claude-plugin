@@ -40,6 +40,10 @@ With an agent key you work **as the user, with less power than the user**. You c
 7. **Keep the key secret.** Never echo or log the key, write it into a shared/project file, or send it anywhere except `https://microstock.plus`. Authorized private client credential storage is allowed; prefer an environment reference or secret store.
 8. **Everything you do is visible.** Changes are saved to the user's files at once and show up in My Files, and every call is audited with the key's prefix. There is no undo button: if the user wants a change reverted, write back the values you read before it.
 
+## Stock metadata policy
+
+Use the canonical [stock metadata system prompt](https://microstock.plus/ai-agent-skills/skill.md?mode=stock-metadata) whenever an agent creates or improves metadata. Its core contract is: inspect every authenticated preview; use a natural title of at most 70 characters; write an accurate media-specific description; keep exactly 50 unique relevant English master keywords with the strongest 10 first; never invent action, emotion or filler, and leave a file blocked if its actual content cannot support 50 truthful terms; avoid facts inferred from filenames or similar references; set `ai_generated: true` and `editorial: false` for generative work; apply only after dry run within the user's authorized scope; then re-read each file because dry-run validation may retain old errors. Check every connected eligible agency and set `ready` only for mutable pre-submission states with clean fresh validation. Preserve ignored/held, queue/progress, submission/review, failure and terminal states. `ready` never authorizes or starts submission.
+
 ## Authentication
 
 1. The user signs in at https://microstock.plus/ai-agent-skills and creates a key in the **Agent keys** section: a name (for example "Claude Code") and scopes. The full key is shown **once**. A user can have up to 10 active keys; each shows its prefix, scopes, creation and last-use time and request count, and can be rotated (new secret, same name and scopes) or revoked (takes effect within 30 seconds). Agent keys open gradually: while the Agent API is not switched on for an account, every call answers `404 not_found`.
@@ -200,21 +204,21 @@ curl -s "https://microstock.plus/api/agent/v1/files?folder=/foto/2026&recursive=
 ### B. Write or improve titles, descriptions and keywords
 
 1. Read the file (`mplus_get_file`): current metadata, `metaver`, `type`, flags, validation per agency, and its inline authenticated preview. For several files use `mplus_get_previews` in batches of 8. Use the attached image pixels first. `preview_url` and `thumbnail_url` are five-minute fallback URLs on canonical `microstock.plus`; rerun the tool after expiry. Never forward the bearer key to a CDN.
-2. Write metadata that describes what is actually visible. Don't guess places, dates, species or brands you can't confirm; ask the user.
+2. Write metadata that describes what is actually visible. Don't guess places, dates, species or brands you can't confirm; leave them out or report the uncertainty.
 3. Check it against the agency rules below and the user's connected agencies (`mplus_get_account`).
 4. Save it as in workflow C. For one file you can use `mplus_update_metadata` (`PATCH /files/{iid}/metadata`) with `if_match_metaver`.
 
-**Titles.** A plain, specific sentence: subject, action, setting, and mood or time when it matters, for example "Empty road through a golden autumn forest at sunrise". No keyword lists, no "stock photo", no ALL CAPS. Microstock+ allows 200 characters; some agencies want less (see the table).
+**Titles.** A plain, specific sentence: subject, visible action when one exists, setting, and a useful visual differentiator. Do not force action or emotion into neutral content. No keyword lists, no "stock photo", no ALL CAPS. The stock-writing policy is at most 70 characters. The API's 200-character field limit is only a technical storage ceiling, not the writing target.
 
 **Descriptions.** One or two sentences that add context to the title: where, when, what is happening. Shutterstock uses this text and allows at most 200 characters and at least 5 words. Editorial captions usually need the place and the date, for example Shutterstock's format `CITY, COUNTRY - MONTH DD, YYYY: what happens`.
 
-**Keywords.** One word or a short phrase per keyword, in English, most important first: the main subject, then what is visible (objects, people, actions, setting), then concepts (mood, season, use). No commas inside a keyword (the MCP tools refuse them), no repeats, no irrelevant or misleading words; spamming keywords gets files rejected. Microstock+ trims and de-duplicates them, lower-cases them if the user's setting says so, and accepts at most 50 per file.
+**Keywords.** Build exactly 50 unique, relevant English master keywords, strongest first: the main subject, then what is visible (objects, people, actions, setting), then concepts (mood, season, use). Use one word or a short phrase per keyword. No commas inside a keyword (the MCP tools refuse them), repeats, filler, or misleading words. If the content cannot support 50 truthful terms, report the file as blocked instead of adding spam. Microstock+ trims and de-duplicates terms, lower-cases them if the user's setting says so, and has a technical cap of 50 per file. Agency caps in the table are submission projections and do not reduce the master list.
 
 **iStock keyword clarification.** After ordinary English keywords exist, call `mplus_resolve_istock_terms` for at most 10 files. Inspect each authenticated preview and choose exactly one id from the candidates returned for each keyword; labels distinguish meanings such as a fruit from a company. `unresolved_keywords` have no current candidate. A `pending` file has no usable candidate set: retry later. Call `mplus_set_istock_terms` with the returned `metaver` and `candidate_set_id`, first with `dry_run=true`. Show the keyword-to-label choices and save with `dry_run=false` only after the owner asks. Never invent ids or reuse a candidate set after metadata changes. Omitted keywords retain only existing choices that remain valid. This provider lookup and metadata save are not paid Microstock+ AI.
 
 | Agency (`id`) | Keywords | Titles and descriptions | Notes |
 | - | - | - | - |
-| Adobe Stock (`adobestock`) | 5-49 | title up to 200 characters | Order matters: Adobe weights the first keywords most, so put the 10 most important first. |
+| Adobe Stock (`adobestock`) | 5-49 | stock-writing title up to 70 characters | Order matters: Adobe weights the first keywords most, so put the 10 most important first. The adapter's 49-keyword cap is reported separately from the 50-keyword master. |
 | Shutterstock (`shutterstock`) | 7-50 | description up to 200 characters, at least 5 words | Prefer single words over phrases. |
 | iStock (`esp`) | 5-49 | title up to 255 characters | iStock maps keywords onto Getty's controlled vocabulary when the file is submitted; words that don't map are dropped or need disambiguation in iStock. Use common English nouns and adjectives. |
 | Pond5 (`pond5`) | 1-50, at most 79 words in total | title 3-80 characters, description up to 500 | Microstock+ checks releases before files go to Pond5 (Pond5 release guard). |
@@ -223,6 +227,8 @@ curl -s "https://microstock.plus/api/agent/v1/files?folder=/foto/2026&recursive=
 | Depositphotos (`depositphotos`) | at least 8 | title and description 6-250 characters | |
 
 These numbers are Microstock+'s validation settings at the time of writing. The `validation` list that the API returns for each agency on each file is the authority; per-agency validation is reported, not enforced, so an over-limit description is flagged, never cut.
+
+Current official Adobe references: [effective titles and keywords](https://helpx.adobe.com/stock/contributor/content-policies-guidelines/metadata/tips-effective-titles-keywords.html), [CSV field requirements, including the 70-character title field](https://helpx.adobe.com/stock/contributor/manage-your-portfolio/csv-requirements-content.html), and [generative AI submission and labeling guidelines](https://helpx.adobe.com/stock/contributor/submit-your-content/submit-generative-ai-content/submit-generative-ai-content.html). Check these sources again when Adobe policy or adapter behavior is in question.
 
 **AI-generated content.**
 
@@ -238,8 +244,8 @@ These numbers are Microstock+'s validation settings at the time of writing. The 
 
 1. Read the current files and note each `metaver`.
 2. Preview: `mplus_update_metadata_batch` with `dry_run: true` (`POST /files/metadata:batch` with `"dry_run": true`). Up to 100 items. Nothing is written; each result shows the would-be file with its validation, or the item's error.
-3. Show the user the changes (old and new title, keywords added and removed, remaining validation problems) and ask for approval.
-4. Apply: the same items with `dry_run: false`. Items succeed or fail independently (`results[].ok`, `succeeded`, `failed`); failed items are unchanged.
+3. Show the user the changes (old and new title, keywords added and removed, remaining validation problems) and establish that this metadata edit is authorized. Authorization already given in the conversation remains valid; do not ask again for the same approved scope.
+4. Apply the same items with `dry_run: false` within that authorized scope. Items succeed or fail independently (`results[].ok`, `succeeded`, `failed`); failed items are unchanged. Re-read every changed file after apply because dry-run validation can retain old errors.
 5. For each `metadata_conflict`: re-read the file, merge your change into the current metadata, and retry only that item with the new `metaver`. Don't simply overwrite: someone, or the user's AI job, changed the file after you read it.
 
 Patch fields: `title`, `description`, `keywords` (`{"set": [...]}` for the whole ordered list, or `{"add": [...]}` and/or `{"remove": [...]}`), `categories`, `editorial`, `ai_generated`, `illustration`, `releases` (`set`, `add`, `remove`), `notes`. In the HTTP API, `null` clears a field and empty strings are refused; the MCP tools take a `clear` list instead (for example `"clear": ["notes"]`).
@@ -255,7 +261,7 @@ curl -s -X POST https://microstock.plus/api/agent/v1/files/metadata:batch \
 
 ### D. Statuses and uploads
 
-Read statuses with `mplus_list_files` and `mplus_get_file`. With `status:write`, call `mplus_set_status` for one `agency`: `ready`, `ignored`, or `queued`. `queued` sends the files to that agency, so show the exact files and agency, obtain explicit approval, and pass `user_confirmed: true`. Do not set progress or review-result states manually. To upload a new local file into M+, create a missing destination with `mplus_create_folder`, initialize with `mplus_initialize_upload`, transfer all missing chunks, then call the returned finish endpoint. Never submit a remote source URL.
+Read statuses with `mplus_list_files` and `mplus_get_file`. With `status:write`, call `mplus_set_status` for one `agency`: `ready`, `ignored`, or `queued`. Set `ready` only from a mutable pre-submission state after a fresh read has clean agency validation; preserve ignored/held, queue/progress, submission/review, failed and terminal states unless the owner explicitly targets them. `queued` sends files to that agency, so use it only when the conversation explicitly authorizes those exact files and agency, and pass `user_confirmed: true`; existing authorization remains valid. To upload a new local file into M+, create a missing destination with `mplus_create_folder`, initialize with `mplus_initialize_upload`, transfer all missing chunks, then call the returned finish endpoint. Never submit a remote source URL.
 
 ### E. Export CSV
 

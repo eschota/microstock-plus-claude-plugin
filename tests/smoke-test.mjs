@@ -17,7 +17,8 @@ import { ALL_SCOPES, DEFAULT_SCOPES, startMockApi } from "./mock-api.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SERVER_PATH = path.join(ROOT, "server", "mplus-mcp.mjs");
-const RUNTIME_VERSION = "1.3.1";
+const RUNTIME_VERSION = "1.4.0";
+const STOCK_METADATA_PROMPT = readFileSync(path.join(ROOT, "docs", "STOCK_METADATA_SYSTEM_PROMPT.md"), "utf8").replace(/\r\n/g, "\n").trim();
 const MODERN = "2026-07-28";
 const IID = {
     leaves42: "6abc74e948864d403ea0c559",
@@ -229,6 +230,7 @@ async function legacySuite(mock, runtimeVersion) {
         assert.match(init.instructions, /Nothing can be deleted/);
         assert.match(init.instructions, /web interface/);
         assert.match(init.instructions, /dry_run=true first/);
+        assert.ok(init.instructions.includes(STOCK_METADATA_PROMPT), "initialize must expose the canonical stock metadata prompt verbatim");
     });
 
     await check("tools/list with MPLUS_ENABLE_PREVIEW_TOOLS=1: the 16 contract tools with schemas and annotations, nothing that deletes", async () => {
@@ -670,6 +672,7 @@ async function modernSuite(mock) {
         assert.ok(result.ttlMs > 0);
         assert.equal(result.cacheScope, "public");
         assert.match(result.instructions, /Nothing can be deleted/);
+        assert.ok(result.instructions.includes(STOCK_METADATA_PROMPT), "server/discover must expose the canonical stock metadata prompt verbatim");
     });
 
     await check("2026-07-28: version and _meta errors (-32022 with supported versions, -32602)", async () => {
@@ -830,6 +833,7 @@ async function httpSuite(mock) {
         assert.equal(init.status, 200);
         assert.equal(init.body.result.protocolVersion, "2025-06-18");
         assert.equal(init.body.result.capabilities.tools.listChanged, false);
+        assert.ok(init.body.result.instructions.includes(STOCK_METADATA_PROMPT), "HTTP initialize must expose the canonical stock metadata prompt verbatim");
         const list = await rawHttp(port, {
             headers: { ...auth, "MCP-Protocol-Version": "2025-06-18" },
             body: { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }
@@ -978,6 +982,9 @@ async function packagingSuite(pluginManifest) {
         assert.equal(catalogue.length, 14);
         assert.deepEqual(catalogue.map(tool => tool.name).sort(), AVAILABLE_TOOLS);
         assert.ok(catalogue.every(tool => tool.scope && tool.api?.method && tool.api?.path));
+        const serverSource = readFileSync(SERVER_PATH, "utf8").replace(/\r\n/g, "\n");
+        const embedded = serverSource.match(/\/\/ STOCK_METADATA_SYSTEM_PROMPT_BEGIN\nconst STOCK_METADATA_SYSTEM_PROMPT = String\.raw`([\s\S]*?)`;\n\/\/ STOCK_METADATA_SYSTEM_PROMPT_END/)?.[1];
+        assert.equal(embedded, STOCK_METADATA_PROMPT, "standalone MCP prompt must equal the canonical prompt byte-for-byte after newline normalization");
         const marketplace = readJson(".claude-plugin", "marketplace.json");
         assert.equal(marketplace.name, "microstock-plus");
         assert.equal(marketplace.plugins[0].source, "./");

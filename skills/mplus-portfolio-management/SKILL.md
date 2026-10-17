@@ -38,7 +38,7 @@ Change nothing; report and propose.
 
 - Find files by status with `mplus_list_files`, `agency` + `status`: for example `rejected` on `adobestock`, `notready` on `shutterstock`, or `submitted` (in review).
 - Read the details with `mplus_get_file`: per agency `validation`, `errors` and `rejection_reasons` when the agency gave a reason.
-- With `status:write`, `mplus_set_status` can set `ready`, `ignored` or `queued` for one agency and up to 100 files. `queued` starts upload/submission to that agency: show the exact files and agency, obtain explicit user approval, then pass `user_confirmed: true`. Never set upload progress or review-result states manually.
+- With `status:write`, `mplus_set_status` can set `ready`, `ignored` or `queued` for one agency and up to 100 files. After an authorized metadata edit, re-read each file and set `ready` only for a mutable pre-submission state with clean fresh validation; preserve ignored/held, queue/progress, submitted/review, failed/rejected/approved, scheduled, `cannotbequeued` and `nosubmissions` states. `queued` starts upload/submission: use it only when the user explicitly authorized those exact files and agencies, then pass `user_confirmed: true`. Existing authorization remains valid. Never infer submission authorization from metadata authorization.
 
 ## Export CSV
 
