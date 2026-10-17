@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "microstock-plus",
-  "version": "1.4.0",
-  "description": "Manage Microstock+ portfolio files with authenticated inline previews, safe metadata and iStock term refinements, uploads and CSV exports without deletion or paid AI actions.",
+  "version": "1.5.0",
+  "description": "Manage Microstock+ files with authenticated previews, stock-ready metadata with 50 ranked keywords, agency readiness checks, uploads and CSV exports without deletion or paid AI actions.",
   "author": {
     "name": "Qwertystock / Microstock+",
     "url": "https://microstock.plus"
@@ -22,7 +22,7 @@
       "interface": {
         "displayName": "Microstock+",
         "shortDescription": "Manage Microstock+ files",
-        "longDescription": "Find every portfolio file across paginated folders, inspect authenticated inline previews, safely edit metadata and choose offered iStock/Getty term refinements, initialize direct uploads, export CSV and follow account events. File deletion and paid AI actions are unavailable.",
+        "longDescription": "Find portfolio files across paginated folders, inspect every authenticated preview, create accurate stock metadata with a title up to 70 characters and 50 ranked English keywords, verify fresh agency validation, preserve protected statuses, refine iStock/Getty terms, initialize uploads and export CSV. File deletion and paid AI actions are unavailable.",
         "developerName": "Qwertystock / Microstock+",
         "category": "Productivity",
         "capabilities": [
@@ -36,6 +36,7 @@
         "defaultPrompt": [
           "Audit my newest Microstock+ folder for missing metadata.",
           "Show previews for files that need keywords, then propose fixes.",
+          "Prepare stock metadata and Ready statuses for my authorized AI-generated batch.",
           "Upload this local file to my selected Microstock+ folder."
         ],
         "brandColor": "#5B5CE2",
@@ -95,7 +96,7 @@
         "commerce_description": "This plugin does not sell products or initiate paid Microstock+ AI actions."
       },
       "publication": {
-        "release_notes": "Microstock+ Agent Plugin 1.4.0 adds skill-plus-token onboarding through the direct API and optional client MCP setup by capable agents. The read-only checker verifies access without installing a server. MCP runtime 1.3.1 preserves inline previews and canonical preview links. Deletion and paid AI actions remain unavailable."
+        "release_notes": "Microstock+ Agent Plugin 1.5.0 adds a canonical stock-metadata policy: preview every file, use titles up to 70 characters, keep exactly 50 ranked English master keywords, verify fresh post-apply agency validation, and set Ready only for clean mutable pre-submission states. MCP runtime 1.4.0 exposes the policy verbatim through initialize and server/discover. Deletion and paid AI actions remain unavailable."
       }
     }
   }

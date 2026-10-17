@@ -1353,7 +1353,7 @@
   {
     "name": "mplus_update_metadata",
     "title": "Update one file's metadata",
-    "description": "Change the metadata of one file. Only the fields you pass change: title, description, keywords (set the whole ordered list, or add/remove words), categories, editorial, ai_generated, illustration, releases, notes; list fields in clear to empty them. Pass if_match_metaver (from mplus_get_file or mplus_list_files) so the change fails with metadata_conflict instead of overwriting a newer edit. ai_generated=true also sets editorial=false. Returns the updated file with its new metaver and per-agency validation. Uploads nothing. There is no undo button: keep the values you read, so you can write them back if the user wants the change reverted. For several files use mplus_update_metadata_batch.",
+    "description": "Change one file's metadata after inspecting its authenticated preview. For stock metadata use a natural title of at most 70 characters, an accurate media-specific description, and exactly 50 unique relevant English master keywords with the strongest 10 first; never silently cut the master to 49 for one agency. Only passed fields change. Pass if_match_metaver so a newer edit is not overwritten. ai_generated=true also sets editorial=false. Returns the updated row, but re-read the file after apply for fresh per-agency validation; dry-run validation may still reflect old metadata. Uploads and submits nothing. For several files use mplus_update_metadata_batch.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -2287,7 +2287,7 @@
   {
     "name": "mplus_set_status",
     "title": "Set agency status (queue uploads)",
-    "description": "Set the per-agency status of up to 100 files: ready (prepared, not sent), queued (send to the agency: upload and submit) or ignored (never send to that agency). Queueing sends the user's files to external stock agencies, so pass user_confirmed=true only after the user explicitly approved these files and agencies in this conversation. Only connected agencies work (see mplus_get_account). The same agency and Microstock+ rules as in the web interface apply, so single items can fail, for example nosubmissions when the submission limit is reached; failures are reported per file and agency.",
+    "description": "Set one agency status for up to 100 files. Use ready only after a fresh post-apply read shows a mutable pre-submission state and clean agency validation; preserve ignored/held, queue/progress, submitted/review, failed/rejected/approved, scheduled, cannotbequeued and nosubmissions states unless the owner explicitly targets them. ready means prepared and does not submit. queued uploads and submits, so pass user_confirmed=true only when the conversation explicitly authorizes these exact files and agency; existing authorization remains valid. Failures are reported per file and agency.",
     "inputSchema": {
       "type": "object",
       "properties": {

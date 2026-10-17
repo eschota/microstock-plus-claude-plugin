@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.0 — 2026-10-17
+
+- Added a canonical stock-metadata system prompt across the packaged skills, English and Russian guides, slash command, tool catalogue, and MCP instructions. Agents inspect each preview, write buyer-facing titles of at most 70 characters, and keep an exact 50-keyword relevant English master list with the strongest terms first.
+- Added post-apply verification and agency readiness rules: re-read files for fresh validation, set Ready only for clean mutable pre-submission states, preserve ignored/held, progress, submission, review, failure and terminal states, and never treat Ready as permission to submit.
+- Standalone MCP runtime 1.4.0 exposes the canonical prompt verbatim through legacy `initialize`, modern `server/discover`, stdio and Streamable HTTP. Plugin version is 1.5.0.
+
 ## 1.4.0 — 2026-10-13
 
 - Add skill-plus-token onboarding through the direct Agent API, without running an MCP server. Capable agents can configure the existing remote MCP client afterward.
